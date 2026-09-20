@@ -36,7 +36,7 @@ proposals(id INTEGER PK, session_id TEXT FK, fingerprint TEXT UNIQUE, title TEXT
 
 Ghi chú thiết kế:
 
-- `changes.before_text` là nội dung tệp **trước khi sửa** — đủ để sinh diff và để `/revert`. Tệp lớn (> 1 MB) không lưu nội dung, chỉ lưu hash + ghi chú "không thể hoàn tác tệp này".
+- `changes.before_text` là nội dung tệp **trước khi sửa**, lưu để **sinh diff nhanh**. Nó **không** phải cơ chế hoàn tác: `/revert` đọc từ `.backup/`, nơi **mọi** tệp bị sửa đều có bản sao, không phân biệt kích thước (`docs/05` §1). Tệp lớn (> 1 MB) vì thế vẫn hoàn tác được; chỉ cột `before_text` là bỏ trống cho chúng.
 - `files.sha256` là bản sao của `manifest.json` trong thư mục làm việc, để truy vấn nhanh.
 - `run_logs` chỉ giữ 5.000 dòng/phiên, dòng cũ bị xoá khi ghi thêm.
 - Không có bảng người dùng, không có bảng tổ chức, không có bảng thanh toán.
@@ -69,7 +69,7 @@ Mô hình mối đe doạ của một **công cụ local một người dùng**:
 
 | Mối đe doạ | Cách chặn |
 |---|---|
-| Trang web lạ trong trình duyệt gọi vào `localhost:8686` (DNS rebinding / CSRF) | Bắt buộc `X-Local-Token`; kiểm `Origin`/`Host` khớp chính xác `127.0.0.1:8686`; `Sec-Fetch-Site: cross-site` ⇒ từ chối; **chỉ bind 127.0.0.1**, không bao giờ 0.0.0.0 (trừ khi người dùng tự truyền `--host`, kèm cảnh báo in ra terminal). Token **không bao giờ trả qua HTTP**: nhúng vào `index.html` lúc backend phục vụ static, lưu ở `~/.tro-ly-du-an/token` (0600), **ổn định giữa các lần chạy** — token đổi mỗi lần `serve` sẽ làm giao diện đang mở 401 hàng loạt. Chỉ khi bật cờ `--dev` (Vite phục vụ trang ở 5173) mới chấp nhận thêm `Origin: http://localhost:5173` và in token ra terminal |
+| Trang web lạ trong trình duyệt gọi vào `localhost:8686` (DNS rebinding / CSRF) | Bắt buộc `X-Local-Token`; kiểm `Origin`/`Host` khớp chính xác `127.0.0.1:8686`; `Sec-Fetch-Site: cross-site` ⇒ từ chối; **chỉ bind 127.0.0.1**, không bao giờ 0.0.0.0 (trừ khi người dùng tự truyền `--host`, kèm cảnh báo in ra terminal). Token **không bao giờ trả qua HTTP**: nhúng vào `index.html` lúc backend phục vụ static, lưu ở `~/.tro-ly-du-an/token` (0600), **ổn định giữa các lần chạy** — token đổi mỗi lần `serve` sẽ làm giao diện đang mở 401 hàng loạt. Chế độ `--dev` **không nới lỏng token**, chỉ chấp nhận thêm `Origin: http://localhost:5173`, và token đi qua **Vite dev proxy** chứ không vào trình duyệt (chi tiết `docs/01` §6) |
 | Đọc/ghi ra ngoài thư mục cho phép | `core/paths.py`: mọi đường dẫn đi qua `resolve()` rồi `is_relative_to(work_dir)`; áp dụng cho cả đường dẫn đến từ API và từ nội dung zip |
 | Tiêm lệnh shell | Spawn bằng `argv`, không `shell=True`; tham số sinh tự động (cổng) là số nguyên đã kiểm |
 | Zip slip / symlink / zip bomb | `ingest/guard.py` (`docs/03` §3) |

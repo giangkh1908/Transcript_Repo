@@ -68,6 +68,9 @@ uv run trolyduan serve        # mở http://127.0.0.1:8686
 | [`docs/07-cau-hinh-credential-llm.md`](docs/07-cau-hinh-credential-llm.md) | Config store, credential store, LLM routing/4 adapter, khám phá model, chống prompt injection |
 | [`docs/08-luu-tru-van-hanh-kiem-thu.md`](docs/08-luu-tru-van-hanh-kiem-thu.md) | Lược đồ SQLite, job runner, huỷ, log/đo lường, bảo mật, đóng gói, chiến lược kiểm thử |
 | [`docs/09-lo-trinh.md`](docs/09-lo-trinh.md) | Lộ trình 5 giai đoạn: việc phải làm, tiêu chí nghiệm thu, phụ thuộc, ước lượng, rủi ro |
+| [`docs/10-tong-hop.md`](docs/10-tong-hop.md) | **Tài liệu chốt** sau bốn vòng review: 8 quyết định kiến trúc, bản đồ 9 tài liệu, những gì đã bác bỏ và vì sao, còn gì mở, bắt đầu từ đâu |
+
+> Người mới nên đọc **`docs/10-tong-hop.md` trước**, rồi quay lại 01–09 theo bảng ở §2 của tệp đó.
 
 ---
 

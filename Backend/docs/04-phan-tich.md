@@ -113,7 +113,24 @@ Cổng dự kiến: đọc từ `vite.config.*`, `package.json` scripts (`--port
 ```
 
 `kind`: `rename_identifier` · `translate_comment` · `write_doc` · `rename_env_key` (luôn `risk: risky`).
-`risk`: `safe` · `risky`. Ngưỡng `safe`/`risky` là **do backend quyết** (frontend không tự đoán — spec §9). Tuỳ chọn `safety: highest|balanced` của người dùng dịch thành: `highest` = mọi thứ chạm chuỗi/cấu hình/API công khai đều `risky`; `balanced` = chỉ chạm cấu hình máy chủ và bí mật mới `risky`.
+
+### Ngưỡng `safe` / `risky` — backend quyết, frontend chỉ hiển thị
+
+Frontend không được tự đoán ngưỡng (spec §9). Người dùng chọn mức ở màn hình đầu (`An toàn: Cao nhất` / `Cân bằng`), backend dịch thành bảng dưới đây. Đây là **định nghĩa chuẩn**, `plan.py` phải implement đúng bảng này:
+
+| Phép biến đổi chạm vào | `safety: highest` (mặc định) | `safety: balanced` |
+|---|---|---|
+| Tên định danh nội bộ, không xuất hiện ở đâu khác | `safe` | `safe` |
+| Chuỗi ký tự ở bất kỳ đâu (kể cả chuỗi hiển thị) | **`risky`** | `safe` |
+| Định danh là API công khai (`__all__`, `export`, `pub`, route/URL name, tên lệnh CLI) | **`risky`** | `safe` |
+| Tham chiếu động (`getattr`, `eval`, reflection, `**kwargs` truyền tiếp) | **`risky`** | **`risky`** |
+| Khoá cấu hình / biến môi trường / tệp deploy hoặc CI | **`risky`** | **`risky`** |
+| Trường dữ liệu cần migration (Django/Alembic/Prisma) | **`risky`** | **`risky`** |
+| Tệp có giá trị bí mật (`.env`) | **`risky`** | **`risky`** |
+
+Quy tắc bất di bất dịch: **`highest` không bao giờ tự làm việc gì chạm tới cấu hình, bí mật, hay migration** — dù người dùng có bấm nhanh thế nào. Mọi phép `risky` đều phải chờ một quyết định `keep`/`change`; thiếu quyết định ⇒ mặc định `keep`.
+
+`risk` được backend gắn cho **từng phép** và trả về trong `plannedChanges` + `riskyItems`; frontend chỉ vẽ nhãn, không tính lại.
 
 ## 9. Ngân sách và chi phí
 
@@ -126,7 +143,7 @@ Cổng dự kiến: đọc từ `vite.config.*`, `package.json` scripts (`--port
 
 - [ ] `inventory.py`: duyệt tệp + `.gitignore` + nhận diện ngôn ngữ/mã hoá/tệp generated; test trên fixture hỗn hợp.
 - [ ] `parsers/libcst_py.py`: lấy định danh, chú thích, import, `__all__`, route Django/Flask; giữ `position` cho mọi node.
-- [ ] `identifiers.py`: heuristic chấm điểm theo **đúng ba ngưỡng ở §3.2** (khác ASCII; tỉ lệ âm tiết tiếng Việt ≥ 60% và ≥ 2 âm tiết, dùng bảng `analyze/data/am_tiet_vi.txt`); + đếm tham chiếu + 4 điều kiện loại trừ ở §3.4; test với fixture tiếng Trung, tiếng Việt không dấu, tiếng Anh viết tắt, và tên trùng khoá env.
+- [ ] `identifiers.py`: heuristic chấm điểm theo **đúng ba ngưỡng ở §3 mục 2** (khác ASCII; tỉ lệ âm tiết tiếng Việt ≥ 60% và ≥ 2 âm tiết, dùng bảng `analyze/data/am_tiet_vi.txt`); + đếm tham chiếu + 4 điều kiện loại trừ ở **§3 mục 4**; test với fixture tiếng Trung, tiếng Việt không dấu, tiếng Anh viết tắt, và tên trùng khoá env.
 - [ ] `comments.py`: tách chú thích/docstring, loại chỉ thị tool, phân loại translate/keep/risky.
 - [ ] `contracts.py`: quét 10 loại tệp cấu hình, trích tên khoá, đối chiếu định danh ⇒ sinh `riskyItems` kèm `evidence`; test với fixture `docker-compose.yml` + `.env.example` + `deploy.yaml`.
 - [ ] `summary.py`: 3 câu văn xuôi, có test "thiếu dữ kiện thì phải nói là thiếu".

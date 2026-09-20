@@ -87,7 +87,7 @@ Không có mục này ⇒ phép biến đổi rủi ro không được phép ch�
 
 - Diff: unified diff từng tệp (`before_text` vs nội dung mới) lưu vào `changes` và trả qua `GET /api/sessions/{id}/changes`, phục vụ mục *"Xem lại từng thay đổi mình đã làm"* (217 thay đổi).
 - `CHANGES.md` (tiếng Việt) ở gốc bản xuất: số lượng theo loại, danh sách nhóm rủi ro và lựa chọn của người dùng, **việc cần làm sau khi tải về**, và dòng *"Bản gốc vẫn nguyên vẹn ở `<đường dẫn gốc>`."*
-- `POST /api/sessions/{id}/revert` — ghi lại nội dung gốc từ SQLite cho mọi tệp đã đổi (dùng khi kiểm chứng hỏng). Chỉ hoạt động trước khi người dùng tải `.zip`; sau đó thư mục làm việc là nguồn sự thật.
+- `POST /api/sessions/{id}/revert` — ghi lại nội dung gốc cho mọi tệp đã đổi, **từ `.backup/`** (không đọc từ SQLite; cột `before_text` chỉ để sinh diff). Chỉ hoạt động trước khi người dùng tải `.zip`; sau đó thư mục làm việc là nguồn sự thật.
 
 ---
 

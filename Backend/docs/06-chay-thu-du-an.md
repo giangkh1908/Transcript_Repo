@@ -82,7 +82,7 @@ Mỗi phiên đang chạy được phục vụ ở **gốc một cổng riêng**
 - Chèn một dải nhỏ, không chặn thao tác: *"Đây là dự án của bạn đang chạy thử"* + nút đóng — để người dùng không nhầm với app thật. Dải này chèn bằng cấu trúc DOM, **không `innerHTML`** nội dung do dự án sinh ra.
 - Không bao giờ đặt hay chuyển tiếp cookie/`Authorization` của app sang cổng proxy.
 
-⚠️ **Việc frontend phải sửa:** `previewSrc` = `http://127.0.0.1:8687/` (origin khác — giá trị thật do backend trả, không hard-code), `sandbox` **giữ nguyên** `allow-scripts allow-forms allow-same-origin allow-popups` vì đã khác origin; nút "Mở trong tab mới" mở `directAddress`. Phải sửa lại ghi chú `ponytail:` trong `screens/Run.tsx` và mục "Nối backend thì đổi ở đâu" của `Frontend/README.md` — cả hai đang khuyên **bỏ** `allow-same-origin`; lời khuyên đó nguy hiểm khi proxy cùng origin và không cần thiết khi đã tách cổng.
+⚠️ **Việc frontend phải sửa:** `previewSrc` = `http://127.0.0.1:8687/` (origin khác — giá trị thật do backend trả, không hard-code), `sandbox` **giữ nguyên** `allow-scripts allow-forms allow-same-origin allow-popups` vì đã khác origin; nút "Mở trong tab mới" mở `directAddress`. Ghi chú `ponytail:` trong `screens/Run.tsx` và mục "Nối backend thì đổi ở đâu" của `Frontend/README.md` **đã được sửa lại** cho khớp quyết định này (trước đây cả hai khuyên bỏ `allow-same-origin` — lời khuyên đó nguy hiểm khi proxy cùng origin, và không cần thiết khi đã tách cổng).
 
 ## 8. Hướng dẫn sử dụng (`run/usage.py`)
 
@@ -134,7 +134,7 @@ Nếu chưa có bằng chứng nào ngoài "dự án mở được ở địa ch
 - [ ] `run/ports.py`: cấp cổng, sổ đăng ký, tránh 8686 và 8687, test "cổng bận thì nhảy cổng".
 - [ ] `run/process.py`: spawn theo argv, **env allowlist**, gom log theo dòng, phát hiện cổng mở, timeout, kill cây bằng Job Object (Windows) / process group (POSIX); test trên Windows **và** POSIX, có test riêng "tiến trình con detach vẫn bị giết".
 - [ ] `run/detect.py`: phát hiện `scripts.postinstall`/`preinstall` trong `package.json` và đưa vào `notes` + lựa chọn `--ignore-scripts`.
-- [ ] `run/proxy.py`: phục vụ trên cổng riêng 8687, chuyển tiếp HTTP + WebSocket + thêm `<base>` + dải thông báo (chèn bằng DOM, không `innerHTML`); test bằng fixture Vite mini.
+- [ ] `run/proxy.py`: phục vụ trên cổng riêng 8687/n, gỡ `X-Frame-Options`/`frame-ancestors`, chuyển tiếp HTTP + **WebSocket thật**, chèn dải thông báo bằng DOM (không `innerHTML`); **không** viết lại `<base>` (đã phục vụ ở gốc cổng); test bằng fixture Vite mini, gồm cả ca HMR qua WebSocket.
 - [ ] `run/usage.py`: 5 nguồn bằng chứng ở §8; test "không có bằng chứng ⇒ trả 1 bước".
 - [ ] `atexit`/signal handler dừng mọi tiến trình con; test: khởi động app, chạy dự án, kill app, kiểm không còn tiến trình con.
 - [ ] Bước "chuẩn bị dữ liệu mẫu": nhận diện migrate/seed 4 loại (Django, Prisma, Alembic, fixture JSON).

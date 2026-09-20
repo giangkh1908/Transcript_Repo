@@ -40,7 +40,7 @@ Bảng mã lỗi — mỗi mã ánh xạ thẳng vào màn **Failed** của giao
 | Method | Đường dẫn | Việc |
 |---|---|---|
 | `GET` | `/api/health` | `{"ok": true, "version": "0.1.0", "uptimeSeconds": 12}` |
-| `GET` | `/api/bootstrap` | Frontend lấy cấu hình khởi động: `{"token": "...", "defaults": {...}, "capabilities": {"treeSitter": ["js","ts","go"], "docker": false}}` |
+| `GET` | `/api/bootstrap` | Frontend lấy thông tin khởi động — **không bao giờ có token ở đây**: `{"defaults": {...}, "capabilities": {"treeSitter": ["js","ts","go"], "docker": false}, "frontendBuilt": true}`. Token đến từ `<meta name="trolyduan-token">` trong `index.html` |
 | `GET` | `/api/doctor` | Kiểm môi trường: git, quyền ghi, cổng trống, frontend dist, có `node`/`python` để chạy dự án — dùng cho lần chạy đầu |
 
 ### 2.2 Danh sách dự án (sidebar)
@@ -57,7 +57,7 @@ Bảng mã lỗi — mỗi mã ánh xạ thẳng vào màn **Failed** của giao
 ```
 
 `state` **dùng đúng enum trạng thái phiên ở `docs/01` §4** — không có bộ từ vựng thứ hai:
-`ingesting` · `analyzing` · `analyzed` · `transforming` · `verifying` · `done` · `failed` · `cancelled` · `interrupted`.
+`queued` · `ingesting` · `analyzing` · `analyzed` · `transforming` · `verifying` · `done` · `failed` · `cancelled` · `interrupted`.
 
 Frontend dựng nhãn từ `state` + số đếm, ví dụ:
 
@@ -67,7 +67,8 @@ Frontend dựng nhãn từ `state` + số đếm, ví dụ:
 | `analyzed`, `changedCount: 0` | *"Sạch — không cần sửa"* (màu xanh dương) |
 | `done` | *"Đã xong"* (màu xanh lá) |
 | `failed` | *"Không mở được"* (màu đỏ) |
-| `ingesting` / `analyzing` | *"Đang chạy"* (màu xám) |
+| `queued` / `ingesting` / `analyzing` | *"Đang chạy"* (màu xám) |
+| `transforming` / `verifying` | *"Đang xử lý"* (màu xám) |
 | `interrupted` | *"Dở dang — mở lại để xem"* (màu xám) |
 
 ⚠️ **Việc frontend phải sửa:** `Project.statusLabel/tone` hiện là câu chữ trong `demo.ts`; chuyển sang map `state → {nhãn, màu}` trong `copy.ts` theo bảng trên.
@@ -345,7 +346,7 @@ Cấu hình khớp đúng seam frontend đang có (`config/store.ts` với `read
 | Done | `GET …/analysis` + `GET …/verification` + `GET …/changes` | `riskyItems`, `summary`, `applied.*`, `changes.total` |
 | Done (quyết định) | `POST …/apply` | nhận `decisions` |
 | Done (xuất) | `/export.zip`, `/report.html` | tệp |
-| Run | `GET/POST …/run`, `…/run/events`, `/preview/{id}/`, `runAvailable` + `runScan` từ `/analysis` | `state`, `address`, `usage`, `notes` |
+| Run | `GET/POST …/run`, `…/run/events`, `…/run/logs`, cổng proxy 8687/n (do backend trả, không phải đường dẫn trong app) | `state`, `previewSrc`, `directAddress`, `usage`, `notes`, `runScan.*` |
 | Clean | `GET …/analysis` (`plannedChanges.total == 0`) + `POST …/docs` + `POST …/ask` | `counts.totalFiles`, `docsToWrite` |
 | Failed | mọi lỗi | `error.code`, `error.message`, `error.technical` |
 | Cài đặt → Mô hình | `/api/config`, `/api/credentials/*`, `/api/providers/discover` | khớp `ModelsSettings` hiện có |
@@ -361,6 +362,6 @@ Cấu hình khớp đúng seam frontend đang có (`config/store.ts` với `read
 - [ ] `core/errors.py`: bảng mã lỗi trên, kèm test cho từng mã (không rò traceback ra `message`).
 - [ ] Middleware token + Origin (test: Origin lạ ⇒ 403; thiếu token ⇒ 401).
 - [ ] `/api/doctor` cho lần chạy đầu (frontend chưa dùng, nhưng CLI dùng — và sẽ hiện ở màn hình đầu nếu thiếu git/node).
-- [ ] Danh sách việc phía frontend: xem `docs/09-lo-trinh.md` §2 (16 việc, đầy đủ và có thứ tự ưu tiên) — mọi ⚠️ trong tài liệu này đều đã nằm trong danh sách đó.
+- [ ] Danh sách việc phía frontend: xem `docs/09-lo-trinh.md` §2 (17 việc, đầy đủ và có thứ tự ưu tiên) — mọi ⚠️ trong tài liệu này đều đã nằm trong danh sách đó.
 
 **Tiêu chí nghiệm thu:** chạy một phiên thật từ link GitHub tới màn Done mà **không phải sửa một dòng nào trong `screens/`** ngoài danh sách ⚠️ đầy đủ ở `docs/09-lo-trinh.md` §2; mọi lỗi trong bảng mã lỗi đều dựng lại được bằng test; và một test hợp đồng so `openapi.json` với `Frontend/src/types.ts` phải **đỏ** khi backend đổi tên một trường mà frontend đang đọc.

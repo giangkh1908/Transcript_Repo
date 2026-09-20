@@ -222,7 +222,21 @@ Sweeper chạy cả khi khởi động bình thường, không chỉ sau crash �
 - Backend **không** trả chuỗi hiển thị cuối cùng cho người dùng, trừ ba ngoại lệ có chủ đích: (1) lý do một câu cho mỗi chỗ rủi ro, (2) hướng dẫn sử dụng ở màn Chạy thử, (3) nội dung tài liệu tiếng Việt do hệ thống viết. Ba thứ này là *nội dung sinh ra*, không phải nhãn giao diện.
 - **Xác thực token — không bao giờ trả token qua HTTP.** Token sinh một lần khi cài, lưu ở `~/.tro-ly-du-an/token` (0600), **ổn định giữa các lần chạy** (token đổi mỗi lần `serve` sẽ làm giao diện đang mở bị 401 hàng loạt). Khi backend phục vụ static, nó **nhúng token vào `index.html`** lúc trả trang (`<meta name="trolyduan-token">`) — trang đó chỉ đến từ chính backend nên an toàn, không cần vòng gọi API nào.
   - `GET /api/bootstrap` **chỉ trả capabilities**, tuyệt đối không trả token. Nếu nó trả token thì mọi thứ khác vô nghĩa: bất kỳ tiến trình nào trên máy (hoặc trang web lọt qua kiểm Origin) đều lấy được token rồi gọi toàn bộ API.
-  - Chế độ `--dev` (Vite ở 5173 phục vụ `index.html`): không nhúng được, nên backend in token ra terminal và chỉ khi cờ `--dev` được bật mới chấp nhận thêm `Origin: http://localhost:5173`. Chi tiết ở `docs/08` §4.
+  - **Chế độ `--dev` (trang do Vite ở 5173 phục vụ) — token không bao giờ vào trình duyệt.** Nhúng meta không làm được, nên dùng **Vite dev proxy** trong `vite.config.ts`:
+
+    ```ts
+    server: {
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:8686',
+          headers: { 'X-Local-Token': process.env.TROLYDUAN_TOKEN ?? '' },
+        },
+      },
+    }
+    ```
+
+    Trình duyệt chỉ nói chuyện với `localhost:5173` (same-origin), **Node của Vite** mới thêm header token; token nằm trong `Frontend/.env.development.local` (đã bị `.gitignore` chặn bởi `*.local`) hoặc biến môi trường khi chạy `pnpm dev`. Backend **vẫn bắt buộc token** trong dev — chỉ nới thêm một thứ duy nhất: chấp nhận `Origin: http://localhost:5173`, và **chỉ khi** cờ `--dev` được bật (in cảnh báo ra terminal lúc khởi động). SSE đi qua proxy bình thường (`ws` để `false`; SSE là HTTP một chiều).
+  - Phía frontend chỉ cần một hàm nhỏ: `token = document.querySelector('meta[name="trolyduan-token"]')?.content` — có thì gửi kèm `X-Local-Token`, không có (chế độ dev) thì thôi, proxy lo.
 
 ---
 

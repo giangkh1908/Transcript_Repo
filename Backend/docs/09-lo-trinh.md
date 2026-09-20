@@ -43,7 +43,7 @@ Nguyên tắc xếp thứ tự: (1) **giá trị sớm nhất** — phần chạ
 | `plan.py` (kế hoạch + phân loại safe/risky theo `safety`) | `docs/04` §8 |
 | `GET /api/projects`, `POST /api/sessions`, `/analysis`, SSE | `docs/02` |
 | `summary.py` **không dùng LLM**: câu 1 suy từ manifest + routes theo mẫu câu cố định | `docs/04` §6 |
-| Nối frontend: 16 việc ở §2 | §2 |
+| Nối frontend: 17 việc ở §2 | §2 |
 
 **Ra được:** bản phát hành đầu tiên cho cộng đồng — *"đưa dự án vào, biết ngay nó có bao nhiêu tên biến khó đọc, bao nhiêu chú thích cần dịch, chỗ nào chạm cấu hình máy chủ"*, không tốn một đồng API.
 
@@ -140,17 +140,20 @@ Rà soát toàn bộ giao diện hiện tại, đây là **tất cả** những 
 | 3 | `Project.statusLabel/tone` → map từ `state` + `riskyCount` trong `copy.ts`; `Project.stage` bỏ khỏi dữ liệu (backend không trả) | Backend trả enum, frontend sở hữu câu chữ |
 | 4 | `ProjectRun.install/start` bỏ `label`, thêm `evidence` | Nhãn là câu chữ của frontend; `evidence` là bằng chứng để mở "Vì sao?" |
 | 5 | Màn Done: 4 nhánh theo `verification.summary` **và** đọc `verification.applied` thay cho số hard-code (`217`/`1.842`/`8`, câu *"trong 4 phút"*) | Hiện hard-code *"dự án vẫn chạy tốt, không lỗi"* — sẽ nói sai khi `not_run`, và số đã làm thật khác số đã lên kế hoạch |
-| 6 | `screens/Run.tsx`: `previewSrc` lấy từ API (`http://127.0.0.1:8687`, **origin khác**) và **giữ nguyên** `allow-same-origin`; "Mở trong tab mới" dùng `directAddress`; đánh số bước 1/2 lấy từ dữ liệu; `runScan.address` cho dòng "Chạy xong, mở vào …" | Proxy phải khác origin; bỏ `allow-same-origin` là lời khuyên sai và phải xoá khỏi comment + README |
+| 6 | `screens/Run.tsx`: `previewSrc` lấy từ API (`http://127.0.0.1:8687`, **origin khác**) và **giữ nguyên** `allow-same-origin`; "Mở trong tab mới" dùng `directAddress`; đánh số bước 1/2 lấy từ dữ liệu; `runScan.address` cho dòng "Chạy xong, mở vào …" | Proxy phải khác origin. Ghi chú trong code + `Frontend/README.md` đã sửa lại cho khớp; việc còn lại là nối dữ liệu thật |
 | 7 | `config/store.ts`: `ConfigBackend` **đồng bộ → nạp một lần + ghi nền**, cắm `ServerBackend`, import document `localStorage` cũ **một lần** | HTTP là bất đồng bộ; cắm thẳng vào là vỡ mọi `getConfig`/`setConfig`. Đây là việc 1–2 ngày, không phải một dòng |
 | 8 | Màn Result: hiện câu thông báo khi `analysis.degraded` (chưa có khoá AI) | Chế độ chỉ-AST là trạng thái bình thường, không phải lỗi |
 | 9 | Sidebar: nút "Xoá phiên này" (tuỳ chọn) | Vòng đời dữ liệu trên máy người dùng |
-| 10 | Dọn `index.html`: bỏ `?mode=expert` + `repo-agent.uiMode` | Tàn dư của chế độ Chuyên gia đã xoá (đã xác nhận trong code) |
+| 10 | Dọn `index.html`: bỏ `?mode=expert` + `repo-agent.uiMode` | Tàn dư của chế độ Chuyên gia đã xoá — **vẫn còn trong code** (`Frontend/index.html` dòng 15–19), chưa dọn |
 | 11 | `Failed.tsx` nhận `error` prop (hiện `message` + `technical` + 3 đường thoát), `ProjectFlow` truyền vào từ trạng thái `failed` | Hiện màn Failed đọc chuỗi hard-code trong `copy.ts`, không có đường nhận lỗi thật |
 | 12 | `types.ts`: `RiskyItem` thêm `kind` + `evidence`; màn Done mở được "Vì sao?" | Bằng chứng là thứ biến "12 chỗ rủi ro" từ con số thành thông tin dùng được |
 | 13 | `copy.ts`: `S.done.report` → *"(HTML, in ra PDF được)"*; `S.reading.about` ("Còn khoảng 1 phút") → theo `progress.etaSeconds` | Nhãn đang sai định dạng thật; ETA đang là số bịa |
 | 14 | `Reading.tsx`/`Working.tsx`/`Run.tsx`: bỏ `setInterval` mô phỏng, đọc SSE thật | Ba màn này hiện tự chạy bằng timer |
 | 15 | `demo.ts`: thống nhất `totalFiles` (500) với `copy.ts` (`428`) | Hai con số khác nhau cho cùng một dự án demo — sẽ lộ ngay khi nối API thật |
 | 16 | `credentials.ts`: `CredentialInfo` thêm `source` (nhận `store` hoặc `env`) và trường hợp `writable: false`; `ModelsSettings` hiện trạng thái chỉ-đọc | Backend có thể lấy khoá từ biến môi trường; UI phải nói được điều đó |
+| 17 | **Dev proxy**: `vite.config.ts` thêm `server.proxy['/api']` → `127.0.0.1:8686` kèm header `X-Local-Token` lấy từ `process.env.TROLYDUAN_TOKEN`; client đọc token từ `<meta name="trolyduan-token">` khi có (bản build) và không gửi gì khi ở dev | Chỉ chạy dev mới cần; giữ token ra khỏi trình duyệt thay vì nới lỏng xác thực backend |
+
+> **Việc #7 (ConfigBackend đồng bộ → bất đồng bộ) là chi phí ẩn lớn nhất của giai đoạn 1** — 1–2 ngày công, và nếu làm ẩu thì **toàn bộ màn Cài đặt vỡ** (`getConfig`/`setConfig` đang được gọi ở `prefs.ts`, `providers.ts`, `ModelsSettings`, `SettingsModal`). Nên làm **trước** khi nối bất kỳ thứ gì khác cần cấu hình; cách làm sạch ở `docs/02` §2.14.
 
 Việc #1 là lớn nhất (khoảng 2–3 ngày công) và nên làm song song với giai đoạn 1 khi backend đã có `/api/health` và job giả.
 
@@ -183,7 +186,7 @@ Một phiên được coi là đạt khi, với một dự án Python thật:
 - [ ] Người dùng bấm Chạy thì thấy **giao diện thật** của dự án, kèm hướng dẫn sử dụng có thật.
 - [ ] Huỷ bất cứ lúc nào đều dừng trong 5 giây và không sót tiến trình con.
 - [ ] Không log nào chứa khoá API; không gọi API nào ra ngoài `localhost` ngoài git và nhà cung cấp LLM mà người dùng đã cấu hình.
-- [ ] Không màn hình nào phải sửa thêm ngoài **16 việc ở §2**.
+- [ ] Không màn hình nào phải sửa thêm ngoài **17 việc ở §2**.
 - [ ] CI xanh trên Windows và Linux, không cần mạng.
 
 ---
