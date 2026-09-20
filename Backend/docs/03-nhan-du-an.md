@@ -23,6 +23,22 @@ Bản `work/` là bản duy nhất bị sửa. `.zip` xuất ra cũng lấy từ
 
 ## 2. Ba nguồn và cách xử lý
 
+### 2.0 Preflight — kiểm trước khi copy, không kiểm sau
+
+Lỗi phát hiện càng muộn càng đắt: người dùng không chuyên ngồi chờ copy 500 MB rồi mới biết máy mình thiếu Python là trải nghiệm tệ nhất có thể. Vì vậy `POST /api/sessions` chạy một lượt kiểm **trước** khi copy một byte nào:
+
+| Kiểm | Ngưỡng | Khi thiếu |
+|---|---|---|
+| Dung lượng trống ở thư mục dữ liệu | ≥ 3× dung lượng nguồn (2 bản copy + backup + chỗ cho SQLite) | `preflight.no_disk`: *"Máy bạn còn ít chỗ trống. Cần khoảng X, hiện còn Y."* |
+| Runtime để chạy thử dự án | python/node/git có trong `PATH` theo loại dự án đã nhận diện sơ bộ | `preflight.no_runtime`: *"Máy bạn chưa có Python 3.11 trở lên."* + link cài |
+| Khoá AI (chỉ khi người dùng chọn việc cần AI) | credential store có giá trị cho `agent.model.default` | Không phải lỗi: trả `degraded` và đi tiếp ở chế độ chỉ-AST |
+| Quyền ghi thư mục dữ liệu | ghi thử một tệp rồi xoá | `perm.unwritable` |
+| Cổng 8686/8687 còn trống | bind thử | Tự đổi cổng, ghi vào `notes` |
+
+Preflight trả về **một** phản hồi duy nhất để frontend hiện một màn hình, không phải ba lỗi liên tiếp. Nó cũng chạy ở `GET /api/doctor` cho lần chạy đầu, để người dùng biết máy mình thiếu gì **trước khi** dán link.
+
+**Biết rõ giới hạn:** preflight đọc dung lượng và `PATH` tại thời điểm gọi — nó không bảo đảm đĩa sẽ còn trống đến hết phiên. Ghi tệp vẫn phải kiểm lại và dừng êm khi hết chỗ (§`docs/05` §1).
+
 ### 2.1 Thư mục trên máy (`kind: "folder"`)
 
 ```
@@ -107,6 +123,6 @@ Ngoại lệ có chủ đích: **các tệp cấu hình luôn được đọc k�
 - [ ] `ingest/github.py`: clone depth 1, tắt prompt, ánh xạ lỗi git sang mã lỗi, xoá `.git` sau khi clone.
 - [ ] `manifest.py`: hash + so sánh trước/sau; test khẳng định `origin/` không đổi sau một phiên đầy đủ.
 - [ ] `skipped.json` + đếm `skippedFiles`, có test với fixture chứa tệp nhị phân và tệp quá lớn.
-- [ ] Dọn dẹp: `trolyduan clean --older-than 30d` xoá thư mục `work/` cũ (người dùng phải chạy, không tự xoá).
+- [ ] Dọn dẹp: `trolyduan clean` xoá thư mục `work/` cũ — **mặc định 7 ngày** và luôn hỏi trước khi xoá (khớp `docs/08` §7; không tự xoá).
 
 **Tiêu chí nghiệm thu:** 12 test tấn công ở `guard` đều bị từ chối; một thư mục 5.000 tệp copy xong dưới 20 giây; một `.zip` 200 MB giải nén đúng và bị chặn khi vượt ngưỡng; link GitHub private cho ra đúng câu *"Link bạn dán đang ở chế độ riêng tư…"*; sau một phiên đầy đủ, hash của `origin/` y hệt lúc đầu.

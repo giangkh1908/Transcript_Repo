@@ -138,7 +138,7 @@ Rà soát toàn bộ giao diện hiện tại, đây là **tất cả** những 
 | 1 | `demo.ts` → client gọi API (`landing` → `POST /sessions`, `projects` → `GET /projects`, `analysis` → `GET /analysis`, `riskyItems` → `analysis.riskyItems`, `demoRun` → `GET /sessions/{id}/run`) | Toàn bộ dữ liệu mẫu là hợp đồng tạm |
 | 2 | Ba dropdown ở `Landing.tsx` gửi kèm khi tạo phiên | Hiện là `useState` **không đi đâu cả** — người dùng chọn mà hệ thống không biết |
 | 3 | `Project.statusLabel/tone` → map từ `state` + `riskyCount` trong `copy.ts`; `Project.stage` bỏ khỏi dữ liệu (backend không trả) | Backend trả enum, frontend sở hữu câu chữ |
-| 4 | `ProjectRun.install/start` bỏ `label`, thêm `evidence` | Nhãn là câu chữ của frontend; `evidence` là bằng chứng để mở "Vì sao?" |
+| 4 | `ProjectRun.install/start` bỏ `label`, thêm `evidence`; **`needs` đổi từ `string` sang `string[]`** | Nhãn là câu chữ của frontend; `evidence` để mở "Vì sao?"; một dự án có thể cần nhiều thứ (Python + Node + Docker) |
 | 5 | Màn Done: 4 nhánh theo `verification.summary` **và** đọc `verification.applied` thay cho số hard-code (`217`/`1.842`/`8`, câu *"trong 4 phút"*) | Hiện hard-code *"dự án vẫn chạy tốt, không lỗi"* — sẽ nói sai khi `not_run`, và số đã làm thật khác số đã lên kế hoạch |
 | 6 | `screens/Run.tsx`: `previewSrc` lấy từ API (`http://127.0.0.1:8687`, **origin khác**) và **giữ nguyên** `allow-same-origin`; "Mở trong tab mới" dùng `directAddress`; đánh số bước 1/2 lấy từ dữ liệu; `runScan.address` cho dòng "Chạy xong, mở vào …" | Proxy phải khác origin. Ghi chú trong code + `Frontend/README.md` đã sửa lại cho khớp; việc còn lại là nối dữ liệu thật |
 | 7 | `config/store.ts`: `ConfigBackend` **đồng bộ → nạp một lần + ghi nền**, cắm `ServerBackend`, import document `localStorage` cũ **một lần** | HTTP là bất đồng bộ; cắm thẳng vào là vỡ mọi `getConfig`/`setConfig`. Đây là việc 1–2 ngày, không phải một dòng |
@@ -171,7 +171,8 @@ Việc #1 là lớn nhất (khoảng 2–3 ngày công) và nên làm song song 
 | Repo monorepo rất lớn | Trung | Ngưỡng 500 MB / 50k tệp + thông báo rõ; đo hiệu năng ở giai đoạn 1 |
 | Chất lượng dịch chú thích kỹ thuật | Trung | 5 kiểm tra kết quả; không đạt thì giữ nguyên bản gốc và ghi cảnh báo |
 | Prompt injection trong repo | Trung | Backend không có agent tự trị; đầu ra qua kiểm tra hình dạng; fixture test riêng |
-| Người dùng không có git/node/python | Thấp | `trolyduan doctor` nói rõ thiếu gì, kèm câu giải thích; không tự cài runtime |
+| **Người dùng mục tiêu không có Python/Node/git** | **Cao** | Đây là rào cản nhập môn lớn nhất, không phải chi tiết nhỏ: `uv tool install` cần Python có sẵn, chạy thử dự án cần đúng runtime của dự án. Giai đoạn 4 **phải** có đường cài không cần Python (bundle hoặc trình cài tự kiểm tra từng bước) và test trên máy Windows trắng. Trước đó `trolyduan doctor` chỉ nói rõ thiếu gì — không tự cài runtime |
+| **Chi phí thật trên repo lớn** | Trung | Ngưỡng nhận là 50.000 tệp nhưng test hiệu năng mới ở 500 tệp; 1.842 chú thích ≈ 46 lô LLM. Cần (a) đo trên fixture 5.000 tệp ngay ở GĐ1, (b) trần chi phí **theo chặng** + ước lượng tiền trước khi bấm, không chỉ trần token cho cả phiên |
 
 ---
 
@@ -201,3 +202,6 @@ Một phiên được coi là đạt khi, với một dự án Python thật:
 6. **Ngôn ngữ thứ hai:** sau Python là TypeScript/JavaScript hay Go? (TS/JS nhiều người dùng hơn nhưng tree-sitter khó chính xác bằng LibCST.)
 7. **Tên package:** `tro-ly-du-an` / lệnh `trolyduan` có ổn không, hay muốn tên khác trước khi phát hành PyPI?
 8. **Tuỳ chọn "Tài liệu: Song ngữ"** ở màn hình đầu: giữ thì phải viết nhánh sinh tài liệu song ngữ (thêm việc ở `transform/docs.py`), bỏ thì xoá khỏi `copy.ts`. Hiện kế hoạch mặc định **giữ** cả hai chế độ vì giao diện đã có sẵn lựa chọn đó.
+9. **Ai cài Python cho người không biết lập trình?** Nếu câu trả lời là "tự họ cài" thì persona mục tiêu không còn đúng — và bản cộng đồng đầu tiên nên giới hạn ở "repo Python chạy được bằng Python đã đóng gói sẵn". Câu này chặn phạm vi đóng gói ở GĐ4.
+10. **Đo thành công bằng gì khi đã tuyên bố không telemetry?** Không đo được tỉ lệ bỏ cuộc ở màn hình đầu và tỉ lệ chạy thử thành công thì dựa vào đâu để biết GĐ1 đáng phát hành? (Gợi ý không xâm phạm: một dòng trong `CHANGES.md` mời người dùng tự gửi phản hồi, cộng số liệu họ tự xem trong `/api/doctor`.)
+11. **Có chấp nhận "không đổi tên" làm sản phẩm chính?** Nếu đổi tên trên Python động là rủi ro cao nhất mà giá trị với người không đọc code là thấp nhất, vì sao nó vẫn ở GĐ2 thay vì sau 1.0 — và có nên để mặc định là **chỉ đọc báo cáo**, còn sửa code là lựa chọn chủ động?

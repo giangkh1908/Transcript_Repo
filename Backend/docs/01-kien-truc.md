@@ -89,7 +89,8 @@ Backend/
 │   │   └── events.py         SSE dùng chung
 │   ├── jobs/
 │   │   ├── runner.py         hàng đợi trong tiến trình, một job/phiên
-│   │   ├── events.py         kênh sự kiện, đệm cho client kết nối muộn
+│   │   ├── events.py         kênh sự kiện: id tăng dần, đệm 500, phát resync
+│   │   ├── sweeper.py        dọn lúc khởi động: job treo, .tmp, tiến trình mồ côi, cổng, DB
 │   │   └── cancel.py         huỷ mềm → cứng, dọn tiến trình con
 │   ├── ingest/
 │   │   ├── folder.py  zipfile.py  github.py

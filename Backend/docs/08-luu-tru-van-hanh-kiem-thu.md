@@ -40,6 +40,7 @@ Ghi chú thiết kế:
 - `files.sha256` là bản sao của `manifest.json` trong thư mục làm việc, để truy vấn nhanh.
 - `run_logs` chỉ giữ 5.000 dòng/phiên, dòng cũ bị xoá khi ghi thêm.
 - Không có bảng người dùng, không có bảng tổ chức, không có bảng thanh toán.
+- `feedback` / `proposals` là **tuỳ chọn, cân nhắc bỏ ở 1.0**: nếu cộng đồng chấp nhận báo lỗi/góp ý qua GitHub Issues thì hai bảng này chỉ thêm việc mà không thêm giá trị. Giữ lại chỉ khi thật sự muốn phân tích phản hồi theo từng thay đổi trong app.
 
 ## 2. Job runner
 
@@ -103,6 +104,7 @@ Chưa có Docker image ở giai đoạn này. Nếu cộng đồng cần, thêm 
 | Tích hợp | Job runner với LLM giả (`MockTransport`), SSE có `Last-Event-ID`, huỷ giữa lô, revert | mọi lần commit |
 | End-to-end | Fixture repo thật (Flask 40 dòng, Vite mini, Django mini, repo có prompt injection, repo "sửa hỏng") — chạy hết luồng tới màn Done | trước mỗi lần phát hành |
 | Hiệu năng | Fixture 500 tệp: phân tích AST < 60 giây, RAM < 1 GB | trước mỗi lần phát hành |
+| **Blind test "không bịa"** | Fixture repo **thiếu** README/route/model: assert `summary`, `usage`, `docs` phải nói *"mình chưa thấy thông tin về phần này"* — **cấm** sinh nội dung nghe hợp lý. Mô hình luôn có xu hướng trả lời cho tròn câu, nên luật "không bịa" mà không có test thì coi như không có | trước phát hành |
 | Không có mạng | Toàn bộ test phải chạy offline (LLM và git đều được giả lập) | mọi lần commit |
 
 CI: GitHub Actions, ma trận `ubuntu-latest` + `windows-latest`, các bước: `ruff check` → `pytest` → build frontend (`pnpm build`) → build wheel → cài wheel trong môi trường sạch và chạy `trolyduan doctor`. **Dựng CI tối thiểu (ruff + pytest + doctor) ngay ở giai đoạn 0** — để tới giai đoạn 4 mới dựng nghĩa là bốn giai đoạn code không có lưới an toàn, và các khác biệt Windows/POSIX (kill tiến trình, quyền tệp, đường dẫn dài) sẽ nổ muộn.

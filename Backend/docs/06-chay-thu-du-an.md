@@ -51,7 +51,7 @@ Không bao giờ tự tải và cài runtime (không `apt`, không `choco`, khô
 3. Kiểm **cả hai** họ địa chỉ (`127.0.0.1` và `::1`) trước khi kết luận cổng trống; ghi lại địa chỉ bind được để dùng cho `directAddress` (dùng `localhost` khi dự án chỉ nghe IPv6).
 4. Nếu cổng đó đang bận: thử cổng kế tiếp (tối đa 20 lần), ghi vào `notes` cổng thật sẽ dùng.
 5. **Không bao giờ** dùng cổng của backend (8686) hay cổng proxy (8687+) hay cổng đã cấp cho phiên khác.
-6. `ports.py` cấp **hai** cổng cho mỗi phiên chạy (cổng dự án + cổng proxy), giữ sổ đăng ký trong bộ nhớ **và** trên đĩa (`run_state`) để hai phiên không giành nhau; giải phóng khi tiến trình dừng. Cấp phát và lấy sổ là một thao tác khoá (`asyncio.Lock`) để tránh hai phiên cùng nhận một cổng.
+6. `ports.py` cấp **hai** cổng cho mỗi phiên chạy (cổng dự án + cổng proxy) và giữ sổ đăng ký **trong bộ nhớ** (cấp phát + lấy sổ là một thao tác khoá `asyncio.Lock` để hai phiên không nhận trùng cổng). Không cần tệp sổ trên đĩa: bảng `run_state` trong SQLite đã ghi phiên nào đang giữ cổng nào, và `jobs/sweeper.py` dùng nó để giải phóng khi khởi động lại (`docs/01` §4).
 7. Sau khi chạy, xác nhận cổng **thật sự** mở: thử kết nối TCP (không phải `GET /`) trên cả hai họ địa chỉ, tối đa 60 giây, **một deadline duy nhất** dùng chung với timeout khởi động ở §6 — không có hai đồng hồ chồng nhau. Việc đọc log tìm `Listening on`/`Port 5173 is in use, trying 5174` chỉ là **gợi ý bổ sung** để biết dự án đổi cổng, không phải căn cứ chính: log của mỗi framework một kiểu, và có dự án không in gì cả.
 
 ## 6. Tiến trình con
@@ -76,7 +76,8 @@ Không bao giờ tự tải và cài runtime (không `apt`, không `choco`, khô
 Mỗi phiên đang chạy được phục vụ ở **gốc một cổng riêng**: `http://127.0.0.1:8687/` chuyển tiếp sang `http://127.0.0.1:<cổng dự án>/…` (phiên thứ hai dùng 8688). Vì phục vụ ở gốc, **không cần viết lại `<base>`** — SPA routing, đường dẫn tương đối và `import` của dự án vẫn đúng như khi chạy trực tiếp. Đây là lý do chọn "một cổng cho mỗi phiên chạy" thay vì tiền tố đường dẫn trên cổng app.
 
 - Chỉ hoạt động khi phiên ở trạng thái `running`; còn lại trả trang nhỏ nói *"Dự án đang không chạy."*
-- **Chuyển tiếp WebSocket thật** (HMR của Vite, socket.io): `httpx` không làm được WebSocket, nên dùng `websockets`/`wsproto` làm client và bắc cầu hai chiều với WebSocket của Starlette. Nếu không làm được thì **bỏ hẳn cam kết này và ghi rõ trong tài liệu** — không để một dòng "hỗ trợ WebSocket" trên giấy mà khi code thì không có.
+- **Chuyển tiếp WebSocket thật** (HMR của Vite, socket.io): `httpx` không làm được WebSocket, nên dùng `websockets`/`wsproto` làm client và bắc cầu hai chiều với WebSocket của Starlette.
+  **Kế hoạch dự phòng, quyết trước khi code:** nếu bắc cầu WS không xong trong ngân sách giai đoạn 3, **bỏ HMR, giữ reload thường** — proxy vẫn phục vụ được HTTP, dự án vẫn chạy và vẫn sửa/xem được, chỉ mất cập nhật nóng. Khi đó màn Run hiện một dòng nhỏ: *"Chế độ xem trước không hỗ trợ cập nhật nóng — bấm F5 sau khi sửa."* Điều **không** được phép: để câu "hỗ trợ WebSocket" nằm trên giấy mà code không có, vì người sau sẽ tin và không kiểm.
 - Gỡ `X-Frame-Options` và `Content-Security-Policy: frame-ancestors` khỏi phản hồi HTML (đây là lý do tồn tại của proxy — Django mặc định `DENY`).
 - Không cache; giới hạn phản hồi 50 MB mỗi request; chỉ bind `127.0.0.1`.
 - Chèn một dải nhỏ, không chặn thao tác: *"Đây là dự án của bạn đang chạy thử"* + nút đóng — để người dùng không nhầm với app thật. Dải này chèn bằng cấu trúc DOM, **không `innerHTML`** nội dung do dự án sinh ra.

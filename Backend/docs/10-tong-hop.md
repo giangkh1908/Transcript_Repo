@@ -36,7 +36,8 @@ Bảng thực dụng: cột trái là việc bạn đang làm, cột phải là 
 | Quét lệnh chạy, cấp cổng, kill cây tiến trình, proxy xem trước, dọn dẹp | `06-chay-thu-du-an.md` |
 | Config sparse, credential store, routing LLM, prompt, chống prompt injection | `07-cau-hinh-credential-llm.md` |
 | Lược đồ SQLite, job runner, sweeper, bảo mật token/Origin, đóng gói, chiến lược test | `08-luu-tru-van-hanh-kiem-thu.md` |
-| Thứ tự làm, ước lượng 57–79 ngày công, 17 việc frontend, câu hỏi mở | `09-lo-trinh.md` |
+| Thứ tự làm, ước lượng 57–79 ngày công, 17 việc frontend, 11 câu hỏi mở | `09-lo-trinh.md` |
+| Đề xuất và phản biện của các vòng review sau cùng, kèm mục "đã xử lý" (nhận gì, bác gì, vì sao) | `11-de-xuat.md` |
 
 ## 3. Ba vòng trước đã đổi gì
 
@@ -74,7 +75,7 @@ Mỗi dòng là một phát hiện nặng và cách xử lý đã chốt — kh�
 
 Ai đề xuất lại một trong bốn ý trên thì đọc lại cột "Vì sao" trước khi mở thảo luận.
 
-## 5. Còn mở — 8 câu hỏi cần người quyết (từ `09-lo-trinh.md` §5)
+## 5. Còn mở — 11 câu hỏi cần người quyết (bản đầy đủ ở `09-lo-trinh.md` §5)
 
 | # | Câu hỏi | Chặn gì nếu chưa quyết |
 |---|---|---|
@@ -86,6 +87,9 @@ Ai đề xuất lại một trong bốn ý trên thì đọc lại cột "Vì sa
 | 6 | Ngôn ngữ thứ hai sau Python: TypeScript/JavaScript hay Go? | Chặn thứ tự thêm parser ở GĐ4 |
 | 7 | Tên package `tro-ly-du-an` / lệnh `trolyduan` có giữ không? | Chặn phát hành PyPI — đổi sau là vỡ link cài đặt |
 | 8 | Giữ tuỳ chọn "Tài liệu: Song ngữ" ở màn đầu? | Giữ thì thêm nhánh sinh song ngữ ở `transform/docs.py`; bỏ thì xoá khỏi `copy.ts` |
+| 9 | Ai cài Python/Node/git cho người không biết lập trình? | Chặn phạm vi đóng gói GĐ4; nếu "tự họ cài" thì persona mục tiêu không còn đúng |
+| 10 | Đo thành công bằng gì khi đã tuyên bố không telemetry? | Chặn tiêu chí "GĐ1 có đáng phát hành không" — không đo được thì chỉ còn cách hỏi cộng đồng |
+| 11 | Mặc định là "chỉ đọc báo cáo" hay "sửa luôn"? | Chặn chữ nghĩa màn hình đầu và thứ tự ưu tiên GĐ2 (đổi tên là rủi ro cao nhất, giá trị thấp nhất với người không đọc code) |
 
 ## 6. Rủi ro còn lại
 

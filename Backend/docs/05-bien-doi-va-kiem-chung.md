@@ -44,6 +44,8 @@ Nếu hai phép đổi tên cho ra cùng một tên trong cùng scope (xung đ�
 
 Tên nào vi phạm ⇒ **giữ nguyên tên cũ** cho định danh đó, ghi một dòng vào `verification.warnings`, và không thử lại quá 2 lần. Không bao giờ để tên do AI sinh ra đi thẳng vào đường dẫn hay lệnh.
 
+**Và luật thứ hai, quan trọng hơn: deny-list Python động ở `docs/04` §3 mục 4.** Gặp `__slots__`, metaclass, `property` setter, `__getattr__`, monkey-patch, tệp sinh tự động hay tên nằm trong dữ liệu (`pickle`, cột DB, template) thì phép đổi tên **không được** đi qua đường `safe` — kể cả khi AST nói "mọi tham chiếu đều khớp". Đây là loại hỏng mà lớp 1 và lớp 2 **không** phát hiện được: code vẫn parse, tham chiếu vẫn đủ, chỉ hành vi lúc chạy là khác. `rename.py` phải kiểm deny-list **trước** khi ghi, không phải sau khi kiểm chứng.
+
 ## 3. Dịch chú thích (`transform/translate.py`)
 
 - Gom chú thích theo tệp, mỗi lô ≤ 40 chú thích, gửi kèm **ngữ cảnh ngắn**: chữ ký hàm/lớp mà chú thích nằm trên, 3 dòng code ngay dưới.
@@ -58,7 +60,7 @@ Tên nào vi phạm ⇒ **giữ nguyên tên cũ** cho định danh đó, ghi m�
 
 ## 4. Viết tài liệu (`transform/docs.py`)
 
-Tám tệp trong `work/docs/vi/` (số lượng thật lấy từ `analysis.counts.docsToWrite`):
+Tám tệp trong `work/docs/vi/` (số lượng thật lấy từ `analysis.counts.docsToWrite`). **Sinh tối đa 8 tệp, bỏ tệp nào dự án không có dữ kiện cho nó** — repo nhỏ mà vẫn đủ 8 tệp nghĩa là có tệp bịa nội dung, đúng thứ luật "không bịa" cấm:
 
 | Tệp | Nội dung | Nguồn |
 |---|---|---|

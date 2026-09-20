@@ -32,7 +32,7 @@ infra:
 | `agent.providers` | `ProviderConfig[]` | 4 nhà cung cấp mặc định | baseURL, protocol, danh sách model, `apiKeyEnv`. **Chỉ mang tên tham chiếu khoá** |
 | `docs.language` | `vi-VN` \| `vi-bilingual` | `vi-VN` | Ngôn ngữ tài liệu sinh ra |
 | `infra.lockExternalConfig` | boolean | `true` | Khoá biến cấu hình hạ tầng — nguồn của nhóm rủi ro |
-| `naming.strictNormalization` | boolean | `true` | Bắt buộc chuẩn hoá định danh theo quy ước quốc tế |
+| `naming.strictNormalization` | boolean | `true` | Bắt buộc chuẩn hoá định danh theo quy ước quốc tế. **Ai dùng:** `transform/rename.py` — khi `true`, mọi tên do AI đề xuất phải là `snake_case` (hàm/biến) hoặc `PascalCase` (lớp), tên vi phạm bị trả về tên cũ; khi `false`, giữ nguyên kiểu chữ mô hình trả về miễn qua luật tên ở `docs/05` §2. `analyze/identifiers.py` đọc cùng key để quyết định có đề xuất đổi tên viết tắt khó đọc hay không |
 
 Bốn key này **phải** giữ đúng tên và kiểu như trong `schema.ts`, nếu không thì `ModelsSettings` và `SettingsModal` sẽ không hoạt động mà chẳng ai hiểu tại sao. Test hợp đồng bắt buộc.
 
@@ -129,7 +129,7 @@ class Adapter(Protocol):
 | Thử lại | 429/500/502/503/504 và lỗi mạng: thử lại tối đa `llm.maxRetries`, backoff 1s → 2s → 4s + jitter. Tôn trọng `retry-after` |
 | Không thử lại | 400/401/403/404/422 — lỗi do cấu hình, thử lại chỉ tốn tiền |
 | Ngân sách | Cộng dồn token mỗi phiên; vượt `llm.budgetTokensPerSession` ⇒ dừng **trước** lời gọi tiếp theo, báo *"Đã chạm giới hạn chi phí bạn đặt cho phiên này"* |
-| Cache | Bảng `llm_cache(hash, model, prompt_version, response)`; hash = sha256(nội dung gửi + model + prompt_version). Chạy lại cùng dự án ⇒ gần như miễn phí. **Quy ước tăng phiên bản:** sửa bất kỳ chữ nào trong một prompt ⇒ tăng `_v1` → `_v2` trong cùng commit; tên phiên bản là một hằng số trong `llm/prompts/__init__.py`, không viết chuỗi rời rạc. Quên tăng ⇒ người dùng nhận kết quả cũ từ cache mà không hiểu vì sao. Có test: đổi phiên bản ⇒ cache phải miss |
+| Cache | Bảng `llm_cache(hash, model, response)`; `hash = sha256(nội dung gửi + model + **toàn văn prompt**)`. Vì prompt nằm nguyên trong hash, **sửa prompt là cache tự miss** — không cần ai nhớ tăng phiên bản bằng tay, và không có chuyện người dùng nhận kết quả cũ mà không hiểu vì sao. Tên tệp prompt (`summary_v1.py`) chỉ để đọc cho dễ; nó **không** tham gia hash. Chạy lại cùng dự án ⇒ gần như miễn phí. Test: sửa một ký tự trong prompt ⇒ cache miss |
 | Đếm token | Đếm xấp xỉ (ký tự/4 cho tiếng Anh, ký tự/2.5 cho tiếng Việt/code) để ước lượng; số thật lấy từ `usage` của nhà cung cấp khi có |
 | Song song | Tối đa 4 lời gọi đồng thời cho một phiên (tránh bị 429 vì tự bắn quá nhanh) |
 

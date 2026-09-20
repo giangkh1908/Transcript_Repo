@@ -181,6 +181,7 @@ Từng màn hình dùng gì:
 - `reason` là **một câu tiếng Việt** do backend viết (ngoại lệ được phép — nội dung sinh ra); đây chính là chỗ màn Done hiển thị.
 - `evidence` để mục "Vì sao?" mở ra được bằng chứng cụ thể, không phải điểm số.
 - `runScan.install.label` / `start.label` **không** do backend trả: frontend đã có nhãn cố định ("Cài các thư viện cần thiết" / "Khởi động dự án") trong `copy.ts`. Backend chỉ trả `command` + `evidence`.
+- `runScan.needs` là **mảng chuỗi** (một dự án có thể cần nhiều thứ: Python 3.11+, Node 20+, Docker). ⚠️ **Việc frontend phải sửa:** `ProjectRun.needs` trong `types.ts` hiện là `string` — đổi thành `string[]`, gộp vào việc #4 ở `docs/09` §2. Không đổi thì nối API là vỡ kiểu ngay.
   ⚠️ **Việc frontend phải sửa:** `ProjectRun.install/start` bỏ trường `label`, thêm `evidence`.
 
 ### 2.7 Hỏi đáp về dự án (màn Result, màn Clean)
@@ -204,6 +205,14 @@ Trả lời phải kèm `sources` — frontend hiện chưa hiện, nhưng giữ
 ```
 
 - Thiếu quyết định ⇒ mặc định `keep` (đúng nguyên tắc "nghiêng về an toàn").
+
+**Định danh của một "chỗ rủi ro" — một khoá, dùng xuyên suốt, không có ánh xạ ngầm:**
+
+```
+analysis.riskyItems[].key   ==   changes[].itemKey   ==   apply.decisions[<key>]   ==   decisions.item_key
+```
+
+`key` là tên ổn định của chỗ đó (thường là tên khoá cấu hình, ví dụ `DATABASE_URL`), **không phải** `changes.id` (id chỉ là số thứ tự dòng trong bảng). Một chỗ rủi ro có thể ứng với **nhiều** dòng `changes` (đổi tên ở code + sửa `.env.example` + sửa `docker-compose.yml`) — vì vậy `changes[]` mang thêm `itemKey`, và màn Done lọc "những thay đổi thuộc chỗ rủi ro số 3" bằng trường này. Bảng `decisions` ghi theo `item_key`; bảng `changes` ghi theo `id` + `item_key`. Không có bảng ánh xạ riêng nào.
 - Trả `202` + job; SSE chuyển `transforming` → `verifying` → `done`.
 - Gọi lại khi đang chạy ⇒ `409` kèm `jobId` hiện tại (không tạo hai job sửa cùng một thư mục).
 - Body nhận thêm header `Idempotency-Key` (tuỳ chọn): cùng key trong 10 phút ⇒ trả lại đúng job cũ thay vì tạo job mới. Cần thiết vì người dùng bấm nút hai lần hoặc mạng chập chờn.
@@ -223,9 +232,14 @@ Trả lời phải kèm `sources` — frontend hiện chưa hiện, nhưng giữ
 ```json
 { "items": [ { "id": 1, "file": "src/services/user_service.py", "kind": "rename_identifier",
                "from": "获取用户", "to": "get_user", "lines": [12, 48], "references": 3,
-               "why": "Tên tiếng Trung, đã đổi sang tiếng Anh." } ],
+               "itemKey": null, "why": "Tên tiếng Trung, đã đổi sang tiếng Anh." },
+             { "id": 9, "file": ".env.example", "kind": "rename_env_key",
+               "from": "DATABASE_URL", "to": "DB_URL", "lines": [3, 3], "references": 0,
+               "itemKey": "DATABASE_URL", "why": "Bạn đã chọn đổi tên khoá này." } ],
   "nextCursor": "50", "total": 217 }
 ```
+
+`itemKey` rỗng (`null`) = thay đổi thuộc nhóm an toàn; có giá trị = thuộc chỗ rủi ro mang đúng khoá đó (xem §2.8).
 
 ### 2.10 Kiểm chứng (dòng "Đã kiểm tra: dự án vẫn chạy tốt, không lỗi")
 
@@ -297,7 +311,7 @@ Khi `running`:
 
 `POST /api/sessions/{id}/docs` → `202` + job. Sinh 8 tệp trong `work/docs/vi/`: `gioi-thieu.md`, `cai-dat.md`, `su-dung.md`, `kien-truc.md`… (danh sách thật lấy từ `analysis.counts.docsToWrite`).
 
-Theo dõi qua cùng kênh SSE của phiên (`state: transforming`, `progress.phase=docs`, `unit=files`), kết thúc bằng `artifact {"kind":"docs","ready":true}` rồi `state: done`. Tiến trình ở màn Clean vì thế không cần endpoint riêng — chỉ cần đọc thêm `unit=docs`.
+Theo dõi qua cùng kênh SSE của phiên (`state: transforming`, `progress.phase=docs`, **`unit=docs`** — đơn vị riêng, không lẫn với `unit=files`), kết thúc bằng `artifact {"kind":"docs","ready":true}` rồi `state: done`. Tiến trình ở màn Clean vì thế không cần endpoint riêng — chỉ cần đọc thêm `unit=docs`.
 
 **Nút "Hỏi mình về dự án này" ở màn Clean dùng lại `POST …/ask`** — không có endpoint chat riêng, không có phiên chat riêng. Nút "Viết tài liệu tiếng Việt" mới gọi `/docs`.
 
