@@ -1,0 +1,220 @@
+@import "tailwindcss";
+
+/* ============================================================
+   Design tokens — NGUỒN MÀU DUY NHẤT.
+   Mặc định: SÁNG. Đổi theme bằng data-theme="dark" trên <html>.
+   Bản này khớp với mockups/_theme.css đã chốt.
+   Không viết mã màu trực tiếp trong component — dùng utility
+   sinh ra từ @theme bên dưới (bg-canvas, border-line, text-ink3…).
+   ============================================================ */
+
+:root {
+  /* nền & bề mặt */
+  --c-canvas: #ffffff;
+  --c-side: #f6f8fa;
+  --c-panel: #ffffff;
+  --c-surface: #ffffff;
+  --c-soft: #f6f8fa;
+  --c-hover: #f3f4f6;
+
+  /* đường kẻ */
+  --c-line: #d8dee4;
+  --c-line-soft: #e7ebef;
+  --c-line-strong: #c6cdd5;
+
+  /* chữ — thang này đã được đo bằng bộ test (tools/uitest.mjs) đạt WCAG AA 4.5:1
+     trên nền trắng; đừng làm nhạt đi mà không chạy lại test */
+  --c-ink: #1f2328;
+  --c-ink2: #4d5560;
+  --c-ink3: #5b636e;
+  --c-ink4: #6e7781;
+
+  /* màu thương hiệu */
+  --c-brand: #4f46e5;
+  --c-brand-hi: #4338ca;
+  --c-brand-soft: rgba(79, 70, 229, 0.09);
+  --c-brand-line: rgba(79, 70, 229, 0.42);
+  --c-brand-ink: #4338ca;
+
+  /* ngữ nghĩa — mỗi màu có hai giá trị cho hai theme */
+  --c-ok: #1a7f37;
+  --c-ok-line: rgba(26, 127, 55, 0.3);
+  --c-ok-bg: rgba(26, 127, 55, 0.08);
+  --c-ok-solid: #1a7f37;
+  --c-ok-solid-hi: #156930;
+  --c-warn: #8a5c00;
+  --c-warn-line: rgba(138, 92, 0, 0.34);
+  --c-warn-bg: rgba(138, 92, 0, 0.08);
+  --c-warn-solid: #8a5c00;
+  --c-warn-solid-hi: #6f4a00;
+  --c-danger: #cf222e;
+  --c-danger-line: rgba(207, 34, 46, 0.3);
+  --c-danger-bg: rgba(207, 34, 46, 0.06);
+  --c-danger-solid: #cf222e;
+  --c-danger-solid-hi: #a40e26;
+  --c-info: #0969da;
+  --c-info-line: rgba(9, 105, 218, 0.3);
+  --c-info-bg: rgba(9, 105, 218, 0.07);
+  --c-info-solid: #0969da;
+
+  /* màu dành riêng cho "AI đề xuất" */
+  --c-ai: #7c3aed;
+  --c-ai-line: rgba(124, 58, 237, 0.32);
+  --c-ai-bg: rgba(124, 58, 237, 0.07);
+
+  /* lớp phủ sau modal */
+  --c-overlay: rgba(31, 35, 40, 0.45);
+
+  --c-shadow: 0 8px 24px rgba(31, 35, 40, 0.08);
+  --c-shadow-btn: 0 6px 18px rgba(79, 70, 229, 0.24);
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --c-canvas: #0d1117;
+  --c-side: #0d1117;
+  --c-panel: #161b22;
+  --c-surface: #0f141a;
+  --c-soft: #0d1117;
+  --c-hover: #21262d;
+
+  --c-line: #30363d;
+  --c-line-soft: #21262d;
+  --c-line-strong: #3d444d;
+
+  --c-ink: #e6edf3;
+  --c-ink2: #c9d1d9;
+  --c-ink3: #a8b1bb;
+  --c-ink4: #8b949e;
+
+  --c-brand: #4f46e5;
+  --c-brand-hi: #6366f1;
+  --c-brand-soft: rgba(99, 102, 241, 0.16);
+  --c-brand-line: rgba(99, 102, 241, 0.45);
+  --c-brand-ink: #a5b4fc;
+
+  --c-ok: #3fb950;
+  --c-ok-line: rgba(63, 185, 80, 0.35);
+  --c-ok-bg: rgba(35, 134, 54, 0.14);
+  --c-ok-solid: #238636;
+  --c-ok-solid-hi: #1f6f2d;
+  --c-warn: #e3b341;
+  --c-warn-line: rgba(210, 153, 34, 0.4);
+  --c-warn-bg: rgba(210, 153, 34, 0.13);
+  --c-warn-solid: #9e6a03;
+  --c-warn-solid-hi: #7f5502;
+  --c-danger: #f85149;
+  --c-danger-line: rgba(248, 81, 73, 0.34);
+  --c-danger-bg: rgba(248, 81, 73, 0.1);
+  --c-danger-solid: #b62324;
+  --c-danger-solid-hi: #8f1c1d;
+  --c-info: #58a6ff;
+  --c-info-line: rgba(56, 139, 253, 0.34);
+  --c-info-bg: rgba(56, 139, 253, 0.1);
+  --c-info-solid: #1158c7;
+
+  --c-ai: #c084fc;
+  --c-ai-line: rgba(192, 132, 252, 0.4);
+  --c-ai-bg: rgba(192, 132, 252, 0.13);
+
+  --c-overlay: rgba(1, 4, 9, 0.72);
+
+  --c-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  --c-shadow-btn: 0 6px 18px rgba(79, 70, 229, 0.28);
+
+  color-scheme: dark;
+}
+
+/* Đưa token thành utility của Tailwind: bg-panel, text-ink3, border-line… */
+@theme inline {
+  --color-canvas: var(--c-canvas);
+  --color-side: var(--c-side);
+  --color-panel: var(--c-panel);
+  --color-surface: var(--c-surface);
+  --color-soft: var(--c-soft);
+  --color-hover: var(--c-hover);
+
+  --color-line: var(--c-line);
+  --color-line-soft: var(--c-line-soft);
+  --color-line-strong: var(--c-line-strong);
+
+  --color-ink: var(--c-ink);
+  --color-ink2: var(--c-ink2);
+  --color-ink3: var(--c-ink3);
+  --color-ink4: var(--c-ink4);
+
+  --color-brand: var(--c-brand);
+  --color-brand-hi: var(--c-brand-hi);
+  --color-brand-soft: var(--c-brand-soft);
+  --color-brand-line: var(--c-brand-line);
+  --color-brand-ink: var(--c-brand-ink);
+
+  --color-ok: var(--c-ok);
+  --color-ok-line: var(--c-ok-line);
+  --color-ok-bg: var(--c-ok-bg);
+  --color-ok-solid: var(--c-ok-solid);
+  --color-ok-solid-hi: var(--c-ok-solid-hi);
+  --color-warn: var(--c-warn);
+  --color-warn-line: var(--c-warn-line);
+  --color-warn-bg: var(--c-warn-bg);
+  --color-warn-solid: var(--c-warn-solid);
+  --color-warn-solid-hi: var(--c-warn-solid-hi);
+  --color-danger: var(--c-danger);
+  --color-danger-line: var(--c-danger-line);
+  --color-danger-bg: var(--c-danger-bg);
+  --color-danger-solid: var(--c-danger-solid);
+  --color-danger-solid-hi: var(--c-danger-solid-hi);
+  --color-info: var(--c-info);
+  --color-info-line: var(--c-info-line);
+  --color-info-bg: var(--c-info-bg);
+  --color-info-solid: var(--c-info-solid);
+
+  --color-ai: var(--c-ai);
+  --color-ai-line: var(--c-ai-line);
+  --color-ai-bg: var(--c-ai-bg);
+  --color-overlay: var(--c-overlay);
+
+  --shadow-panel: var(--c-shadow);
+  --shadow-brand: var(--c-shadow-btn);
+}
+
+@layer base {
+  html,
+  body {
+    margin: 0;
+    padding: 0;
+    background-color: var(--c-canvas);
+    color: var(--c-ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+      Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+    min-height: 100vh;
+    width: 100%;
+    overflow-x: hidden;
+  }
+
+  #root {
+    min-height: 100vh;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-line);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-line-strong);
+}

@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="vi" data-theme="light">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Trợ lý dự án</title>
+    <script>
+      /* Chống nháy khi tải: gắn data-theme TRƯỚC khi CSS/render chạy.
+         Mặc định là SÁNG. Cả hai chế độ dùng chung theme.
+         Không đặt việc này trong useEffect. */
+      (function () {
+        try {
+          var p = new URLSearchParams(location.search);
+          var mode = p.get('mode');
+          var theme = p.get('theme');
+          var savedMode = localStorage.getItem('repo-agent.uiMode');
+          var savedTheme = localStorage.getItem('repo-agent.theme');
+          var uiMode = mode === 'expert' || mode === 'simple' ? mode : savedMode || 'simple';
+          var t = theme === 'dark' || theme === 'light' ? theme : savedTheme || 'light';
+          document.documentElement.dataset.theme = t;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'light';
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
