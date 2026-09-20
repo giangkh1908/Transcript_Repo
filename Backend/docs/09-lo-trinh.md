@@ -2,11 +2,11 @@
 
 Nguyên tắc xếp thứ tự: (1) **giá trị sớm nhất** — phần chạy được không cần khoá AI làm trước, để bản phát hành đầu tiên đã có ích cho cộng đồng; (2) **rủi ro giảm dần** — làm phần dễ sai trước khi có người dùng thật; (3) **mỗi giai đoạn tự đứng được** — kết thúc giai đoạn nào là có thứ phát hành được ở đó.
 
-Ước lượng là **ngày công của một người đã quen codebase**, không phải lịch. Cộng lại khoảng **45–60 ngày công** cho tới bản 1.0.
+Ước lượng là **ngày công của một người đã quen codebase**, không phải lịch. Cộng lại khoảng **57–79 ngày công** cho tới bản 1.0. Phần việc phía frontend ở §2 **không** nằm trong con số này.
 
 ---
 
-## Giai đoạn 0 — Khung chạy được (≈5–7 ngày)
+## Giai đoạn 0 — Khung chạy được (≈6–9 ngày)
 
 **Mục tiêu:** mở được giao diện thật ở `127.0.0.1:8686`, có job giả chạy qua SSE. Chưa có nghiệp vụ gì.
 
@@ -14,20 +14,22 @@ Nguyên tắc xếp thứ tự: (1) **giá trị sớm nhất** — phần chạ
 |---|---|
 | `pyproject.toml`, package, entry point `trolyduan` | `README.md` §3 |
 | `cli.py serve/doctor/version`, `app.py` + mount `Frontend/dist` | `docs/01` §7 |
-| Middleware token + Origin + bind 127.0.0.1 | `docs/08` §4 |
+| Middleware token (nhúng `index.html`) + Origin + bind 127.0.0.1 | `docs/08` §4 |
 | `core/{settings,paths,errors,logging}` | `docs/01` §2 |
 | `store/db.py` + migration 001 | `docs/08` §1 |
-| `jobs/runner.py` + SSE (job giả 3 bước, huỷ được) | `docs/08` §2 |
+| `jobs/runner.py` + `jobs/sweeper.py` + SSE (job giả 3 bước, huỷ được) | `docs/08` §2 |
+| **CI tối thiểu** (ruff + pytest + `doctor` + build wheel) trên Windows và Linux | `docs/08` §6 |
+| **Sinh `openapi.json` + stub kiểu TypeScript** | `docs/02` §4 |
 
-**Ra được:** một bản chạy được để cả nhóm nhìn thấy đường đi; frontend nối được SSE thật.
+**Ra được:** một bản chạy được để cả nhóm nhìn thấy đường đi; frontend nối được SSE thật; việc nối API ở giai đoạn 1 không phải chờ hợp đồng.
 
-**Nghiệm thu:** `uv run trolyduan serve` mở giao diện; job giả hiện tiến trình trên màn Reading; bấm Huỷ dừng dưới 1 giây; gọi API từ Origin lạ bị 403.
+**Nghiệm thu (máy kiểm được, không nhìn bằng mắt):** `uv run trolyduan serve` trả `GET /api/health` `200`; trang giao diện có `<meta name="trolyduan-token">`; gọi `/api/*` từ Origin lạ trả `403` và thiếu token trả `401` (2 test); job giả phát đúng 3 sự kiện `step` có `id:` liên tục; thời gian từ `POST /cancel` tới sự kiện `state: cancelled` **< 1 giây** (assert trong test, đo bằng đồng hồ); CI xanh trên cả hai hệ điều hành.
 
 ---
 
-## Giai đoạn 1 — Đọc hiểu dự án, không cần AI (≈12–16 ngày)
+## Giai đoạn 1 — Đọc hiểu dự án, không cần AI (≈18–25 ngày)
 
-**Mục tiêu:** từ link GitHub / thư mục / `.zip` tới màn **Result** và **Clean** với số liệu **thật**, hoàn toàn bằng AST. Đây là giai đoạn có giá trị cộng đồng cao nhất trên mỗi ngày công, vì nó chạy được ngay cả khi người dùng chưa có khoá AI.
+**Mục tiêu:** từ link GitHub / thư mục / `.zip` tới màn **Result** và **Clean** với số liệu **thật**, hoàn toàn bằng AST, **chỉ với dự án Python**. Đây là giai đoạn có giá trị cộng đồng cao nhất trên mỗi ngày công, vì nó chạy được ngay cả khi người dùng chưa có khoá AI.
 
 | Việc | Ở đâu |
 |---|---|
@@ -41,70 +43,73 @@ Nguyên tắc xếp thứ tự: (1) **giá trị sớm nhất** — phần chạ
 | `plan.py` (kế hoạch + phân loại safe/risky theo `safety`) | `docs/04` §8 |
 | `GET /api/projects`, `POST /api/sessions`, `/analysis`, SSE | `docs/02` |
 | `summary.py` **không dùng LLM**: câu 1 suy từ manifest + routes theo mẫu câu cố định | `docs/04` §6 |
-| Nối frontend: `demo.ts` → client API thật | danh sách ⚠️ bên dưới |
+| Nối frontend: 16 việc ở §2 | §2 |
 
 **Ra được:** bản phát hành đầu tiên cho cộng đồng — *"đưa dự án vào, biết ngay nó có bao nhiêu tên biến khó đọc, bao nhiêu chú thích cần dịch, chỗ nào chạm cấu hình máy chủ"*, không tốn một đồng API.
 
-**Nghiệm thu:** fixture 500 tệp cho đúng 217 định danh / 1.842 chú thích / 12 mục rủi ro kèm bằng chứng; phân tích dưới 60 giây; `origin/` không đổi một byte; màn Result và Clean hiện số thật.
+**Nghiệm thu:** trên fixture đã **khoá hash trong `tests/fixtures/`** (500 tệp, 217 định danh tiếng Trung, 1.842 chú thích, 12 khoá cấu hình): báo cáo khớp **từng con số, sai số 0** — không dùng số "khoảng"; phân tích AST **< 60 giây** (đo bằng test, không phải cảm nhận); hash của `origin/` sau phiên **khớp `manifest.json` byte-for-byte**; ngôn ngữ ngoài Python bị báo đúng là chưa hỗ trợ đổi tên; màn Result và Clean hiện số thật.
 
 ---
 
-## Giai đoạn 2 — AI vào cuộc: tóm tắt, đổi tên, dịch, kiểm chứng (≈12–16 ngày)
+## Giai đoạn 2 — AI vào cuộc: tóm tắt, đổi tên, dịch, kiểm chứng lớp 1+2 (≈14–18 ngày)
 
-**Mục tiêu:** màn **Working** và **Done** với kết quả thật, có kiểm chứng.
+**Mục tiêu:** màn **Working** và **Done** với kết quả thật. Kiểm chứng gồm **lớp 1 (cú pháp) + lớp 2 (liên kết)**; lớp 3 (chạy thử) đi cùng giai đoạn 3 vì nó dùng lại máy móc của màn Run — nếu làm ở đây sẽ tạo phụ thuộc vòng giữa hai giai đoạn.
 
 | Việc | Ở đâu |
 |---|---|
 | `llm/` 4 adapter + router + budget + cache + khám phá model | `docs/07` §4 |
-| `llm/prompts/` 5 prompt có phiên bản + `sanitize` chống injection | `docs/07` §4.5–4.6 |
-| Credential store thật + `redact()` + API credential | `docs/07` §3 |
-| Config store thật + `/api/config` + import từ frontend | `docs/07` §2 |
-| `transform/rename.py` (LibCST theo scope) | `docs/05` §2 |
-| `transform/translate.py` (lô + 5 kiểm tra kết quả) | `docs/05` §3 |
-| `writer.py` atomic + `before_text` + diff + `/revert` | `docs/05` §1, §6 |
-| `verify/` 3 lớp + `summary` 4 giá trị | `docs/05` §7 |
-| `GET …/changes`, `/verification`, `POST …/apply`, `/revert` | `docs/02` |
+| `llm/prompts/` 5 prompt có phiên bản + `validate()` cho **cả 5** + `sanitize` chống injection | `docs/07` §4.5–4.6 |
+| Credential store thật + `redact()` hai tầng + API credential | `docs/07` §3 |
+| Config store thật + `/api/config` + `/api/config/import` | `docs/07` §2 |
+| `transform/rename.py` (LibCST theo scope + luật tên ở §2) | `docs/05` §2 |
+| `transform/translate.py` (lô + 5 kiểm tra kết quả + nhánh song ngữ) | `docs/05` §3 |
+| `writer.py` atomic + `.backup/` + diff + `/revert` | `docs/05` §1, §6 |
+| `verify/syntax.py` + `verify/references.py` + `summary` 4 giá trị | `docs/05` §7 |
+| `GET …/changes`, `/verification`, `/usage`, `POST …/apply`, `/cancel`, `/revert` | `docs/02` |
 | Trạng thái suy giảm khi không có khoá AI (`analysis.degraded`) | `docs/07` §4.7 |
 
 **Ra được:** sản phẩm đúng như lời hứa với người dùng — đổi tên, dịch chú thích, và nói thật về việc đã kiểm chứng được tới đâu.
 
-**Nghiệm thu:** fixture Python chạy hết luồng tới màn Done; lớp 1 + lớp 2 đạt 100%; fixture "sửa hỏng" bị phát hiện (không được báo `passed`); `revert` khôi phục hash khớp `manifest.json`; fixture prompt injection không gây tác dụng phụ.
+**Nghiệm thu:** fixture Python chạy hết luồng tới màn Done; **100% tệp đã chạm parse lại được** và **0 tham chiếu gãy** (hai assert); fixture "sửa hỏng" cố ý ⇒ `summary == "failed"`, không bao giờ `passed`; `/revert` xong thì hash toàn bộ `work/` khớp `manifest.json`; fixture prompt injection ⇒ **assert không tệp nào bị ghi ngoài kế hoạch và không lệnh nào được chạy**; LLM giả trả JSON vỡ ⇒ phiên vẫn hoàn thành, `summary` và `warnings` nói đúng sự thật.
 
 ---
 
-## Giai đoạn 3 — Chạy thử dự án (≈8–12 ngày)
+## Giai đoạn 3 — Chạy thử dự án + kiểm chứng lớp 3 (≈11–15 ngày)
 
-**Mục tiêu:** màn **Run** chạy thật — quét lệnh, cài, khởi động, khung xem trước, hướng dẫn sử dụng, dừng sạch.
+**Mục tiêu:** màn **Run** chạy thật — quét lệnh, cài, khởi động, khung xem trước ở cổng riêng, hướng dẫn sử dụng, dừng sạch. Kèm **kiểm chứng lớp 3 (smoke)**, vì nó dùng chính `run/process.py`.
 
 | Việc | Ở đâu |
 |---|---|
-| `run/ports.py`, `run/process.py` (log theo dòng, cổng mở, timeout, kill cây) | `docs/06` §5–6 |
+| `run/ports.py` (bind thật, IPv4+IPv6, cấp 2 cổng/phiên), `run/process.py` (env allowlist, log theo dòng, timeout, kill cây bằng Job Object/process group) | `docs/06` §5–6 |
 | Bước "chuẩn bị dữ liệu mẫu" (venv/migrate/seed) | `docs/06` §3 |
-| `run/proxy.py` (HTTP + WebSocket + `<base>` + dải thông báo) | `docs/06` §7 |
+| `run/proxy.py` (cổng riêng 8687/n, gỡ `X-Frame-Options`, WebSocket thật) | `docs/06` §7 |
 | `run/usage.py` (hướng dẫn từ bằng chứng) | `docs/06` §8 |
-| Dừng/dọn dẹp + handler khi thoát app | `docs/06` §9 |
-| Frontend: `previewSrc` + bỏ `allow-same-origin` | `docs/06` §7 ⚠️ |
+| `verify/smoke.py` (dùng lại `run/`) | `docs/05` §7 |
+| Dừng/dọn dẹp + handler khi thoát app + dọn ở sweeper | `docs/06` §9 |
+| Frontend: việc #6, #13, #14 ở §2 | `docs/06` §7 ⚠️ |
 
 **Ra được:** vòng tròn khép kín — sửa xong thì thấy dự án chạy, kèm hướng dẫn cho người không biết lập trình.
 
-**Nghiệm thu:** fixture Flask và Vite mini chạy hết 4 bước, giao diện hiện trong khung xem trước, Dừng đóng cổng trong 5 giây, không sót tiến trình con; dự án thiếu bằng chứng thì **không** hiện nút Chạy mà nói rõ lý do.
+**Nghiệm thu (máy kiểm được):** fixture Flask và Vite mini: `GET http://127.0.0.1:8687/` trả **HTTP 200** và thân trang chứa nội dung của dự án; sau `POST /run/stop`, **kết nối TCP tới cổng dự án và cổng proxy đều thất bại trong < 5 giây**; **số tiến trình con còn sống = 0** (đếm bằng Job Object trên Windows / process group trên POSIX, kể cả fixture cố tình detach); dự án thiếu bằng chứng ⇒ `runAvailable == false` và API từ chối `POST /run`; dự án cần Docker mà Docker tắt ⇒ trả `notes` đúng câu, không treo.
 
 ---
 
-## Giai đoạn 4 — Hoàn thiện cho cộng đồng (≈8–10 ngày)
+## Giai đoạn 4 — Hoàn thiện cho cộng đồng (≈8–12 ngày)
 
 | Việc | Ở đâu |
 |---|---|
 | `transform/docs.py` 8 tệp tài liệu tiếng Việt | `docs/05` §4 |
-| `/export.zip` + `/report.html` (in ra PDF) + `CHANGES.md` | `docs/02` §2.13 |
+| `/export.zip` (không có `.env`) + `/report.html` (đã escape) + `CHANGES.md` | `docs/02` §2.13 |
 | Lịch sử phiên, xoá phiên, `trolyduan clean` | `docs/08` §7 |
 | Phản hồi người dùng thành dữ liệu (`feedback`, `proposals`) | `docs/08` §1 |
 | `trolyduan doctor` + hiện ở lần chạy đầu | `docs/08` §9 |
-| Đóng gói: wheel kèm static, CI 2 hệ điều hành, phát hành PyPI | `docs/08` §5 |
+| Đóng gói: wheel kèm static (kiểm `frontendBuilt`), phát hành PyPI | `docs/08` §5 |
 | README gốc repo + `LICENSE` + `CONTRIBUTING` | câu hỏi mở §5 |
 | Ngôn ngữ thứ hai (TS/JS) ở mức đổi tên | `docs/04` §2 |
 
 **Ra được:** bản 1.0 cài bằng một lệnh, có tài liệu, có giấy phép, có đường cho người đóng góp.
+
+**Nghiệm thu:** `pipx install` wheel trong một máy ảo **không có Node** rồi `trolyduan serve` mở được giao diện (assert `GET /` 200 + có `<meta name="trolyduan-token">`); `export.zip` giải nén ra đúng cây tệp, **không có tệp `.env` nào**, có `CHANGES.md`; `report.html` mở được và **không chạy script nào** (mở bằng trình duyệt headless, assert không có `alert`/lỗi CSP); `trolyduan doctor` báo đúng khi thiếu git/node/cổng bị chiếm; tài liệu 8 tệp đọc được và **không tệp nào chứa giá trị thật của một khoá cấu hình** (assert theo mẫu).
 
 ---
 
@@ -112,11 +117,15 @@ Nguyên tắc xếp thứ tự: (1) **giá trị sớm nhất** — phần chạ
 
 | Giai đoạn | Ngày công | Phát hành được gì | Phụ thuộc |
 |---|---|---|---|
-| 0 — Khung | 5–7 | Bản chạy nội bộ | — |
-| 1 — Đọc hiểu (AST) | 12–16 | **Bản cộng đồng đầu tiên, không cần khoá AI** | GĐ 0 |
-| 2 — AI + biến đổi + kiểm chứng | 12–16 | Sản phẩm đúng lời hứa | GĐ 1 |
-| 3 — Chạy thử | 8–12 | Vòng tròn khép kín | GĐ 2 (dùng lại `entrypoints`) |
-| 4 — Hoàn thiện | 8–10 | Bản 1.0 | GĐ 3 |
+| 0 — Khung (+ CI, OpenAPI stub) | 6–9 | Bản chạy nội bộ | — |
+| 1 — Đọc hiểu (AST, chỉ Python) | 18–25 | **Bản cộng đồng đầu tiên, không cần khoá AI** | GĐ 0 |
+| 2 — AI + biến đổi + kiểm chứng lớp 1+2 | 14–18 | Sản phẩm đúng lời hứa (trừ phần chạy thử) | GĐ 1 |
+| 3 — Chạy thử + kiểm chứng lớp 3 (smoke) | 11–15 | Vòng tròn khép kín | GĐ 2 (dùng lại `entrypoints`) |
+| 4 — Hoàn thiện, đa ngôn ngữ, phát hành | 8–12 | Bản 1.0 | GĐ 3 |
+
+**Tổng: ≈57–79 ngày công.** Con số này đã tính lại sau review: ước lượng đầu tiên (45–60) lạc quan ở giai đoạn 1 và 2 — LibCST theo scope + import graph + hợp đồng cấu hình + heuristic tiếng Việt không dấu là phần khó nhất của cả dự án, không phải phần dễ.
+
+Ước lượng là **ngày công của một người đã quen codebase**, không phải lịch. Phần việc phía frontend (§2) **không** nằm trong bảng này.
 
 ---
 
@@ -126,16 +135,22 @@ Rà soát toàn bộ giao diện hiện tại, đây là **tất cả** những 
 
 | # | Việc | Vì sao |
 |---|---|---|
-| 1 | `demo.ts` → client gọi API (`landing` → `POST /sessions`, `projects` → `GET /projects`, `analysis` → `GET /analysis`, `riskyItems` → `analysis.riskyItems`, `demoRun` → `analysis.runScan`) | Toàn bộ dữ liệu mẫu là hợp đồng tạm |
+| 1 | `demo.ts` → client gọi API (`landing` → `POST /sessions`, `projects` → `GET /projects`, `analysis` → `GET /analysis`, `riskyItems` → `analysis.riskyItems`, `demoRun` → `GET /sessions/{id}/run`) | Toàn bộ dữ liệu mẫu là hợp đồng tạm |
 | 2 | Ba dropdown ở `Landing.tsx` gửi kèm khi tạo phiên | Hiện là `useState` **không đi đâu cả** — người dùng chọn mà hệ thống không biết |
-| 3 | `Project.statusLabel/tone` → map từ `state` + `riskyCount` trong `copy.ts` | Backend trả enum, frontend sở hữu câu chữ |
+| 3 | `Project.statusLabel/tone` → map từ `state` + `riskyCount` trong `copy.ts`; `Project.stage` bỏ khỏi dữ liệu (backend không trả) | Backend trả enum, frontend sở hữu câu chữ |
 | 4 | `ProjectRun.install/start` bỏ `label`, thêm `evidence` | Nhãn là câu chữ của frontend; `evidence` là bằng chứng để mở "Vì sao?" |
-| 5 | Màn Done: 4 nhánh theo `verification.summary` | Hiện hard-code *"dự án vẫn chạy tốt, không lỗi"* — sẽ nói sai khi `not_run` |
-| 6 | `screens/Run.tsx`: `previewSrc` = `/preview/<id>/`, bỏ `allow-same-origin`, "Mở trong tab mới" dùng `directAddress` | Proxy cùng origin; bỏ cờ sandbox để code người dùng không chạm app |
-| 7 | `config/store.ts`: cắm `ServerBackend` + import document `localStorage` cũ **một lần** | Không thì người dùng đang dùng bản demo mất hết cấu hình |
+| 5 | Màn Done: 4 nhánh theo `verification.summary` **và** đọc `verification.applied` thay cho số hard-code (`217`/`1.842`/`8`, câu *"trong 4 phút"*) | Hiện hard-code *"dự án vẫn chạy tốt, không lỗi"* — sẽ nói sai khi `not_run`, và số đã làm thật khác số đã lên kế hoạch |
+| 6 | `screens/Run.tsx`: `previewSrc` lấy từ API (`http://127.0.0.1:8687`, **origin khác**) và **giữ nguyên** `allow-same-origin`; "Mở trong tab mới" dùng `directAddress`; đánh số bước 1/2 lấy từ dữ liệu; `runScan.address` cho dòng "Chạy xong, mở vào …" | Proxy phải khác origin; bỏ `allow-same-origin` là lời khuyên sai và phải xoá khỏi comment + README |
+| 7 | `config/store.ts`: `ConfigBackend` **đồng bộ → nạp một lần + ghi nền**, cắm `ServerBackend`, import document `localStorage` cũ **một lần** | HTTP là bất đồng bộ; cắm thẳng vào là vỡ mọi `getConfig`/`setConfig`. Đây là việc 1–2 ngày, không phải một dòng |
 | 8 | Màn Result: hiện câu thông báo khi `analysis.degraded` (chưa có khoá AI) | Chế độ chỉ-AST là trạng thái bình thường, không phải lỗi |
 | 9 | Sidebar: nút "Xoá phiên này" (tuỳ chọn) | Vòng đời dữ liệu trên máy người dùng |
-| 10 | Dọn `index.html`: bỏ `?mode=expert` + `repo-agent.uiMode` | Tàn dư của chế độ Chuyên gia đã xoá |
+| 10 | Dọn `index.html`: bỏ `?mode=expert` + `repo-agent.uiMode` | Tàn dư của chế độ Chuyên gia đã xoá (đã xác nhận trong code) |
+| 11 | `Failed.tsx` nhận `error` prop (hiện `message` + `technical` + 3 đường thoát), `ProjectFlow` truyền vào từ trạng thái `failed` | Hiện màn Failed đọc chuỗi hard-code trong `copy.ts`, không có đường nhận lỗi thật |
+| 12 | `types.ts`: `RiskyItem` thêm `kind` + `evidence`; màn Done mở được "Vì sao?" | Bằng chứng là thứ biến "12 chỗ rủi ro" từ con số thành thông tin dùng được |
+| 13 | `copy.ts`: `S.done.report` → *"(HTML, in ra PDF được)"*; `S.reading.about` ("Còn khoảng 1 phút") → theo `progress.etaSeconds` | Nhãn đang sai định dạng thật; ETA đang là số bịa |
+| 14 | `Reading.tsx`/`Working.tsx`/`Run.tsx`: bỏ `setInterval` mô phỏng, đọc SSE thật | Ba màn này hiện tự chạy bằng timer |
+| 15 | `demo.ts`: thống nhất `totalFiles` (500) với `copy.ts` (`428`) | Hai con số khác nhau cho cùng một dự án demo — sẽ lộ ngay khi nối API thật |
+| 16 | `credentials.ts`: `CredentialInfo` thêm `source` (nhận `store` hoặc `env`) và trường hợp `writable: false`; `ModelsSettings` hiện trạng thái chỉ-đọc | Backend có thể lấy khoá từ biến môi trường; UI phải nói được điều đó |
 
 Việc #1 là lớn nhất (khoảng 2–3 ngày công) và nên làm song song với giai đoạn 1 khi backend đã có `/api/health` và job giả.
 
@@ -168,7 +183,7 @@ Một phiên được coi là đạt khi, với một dự án Python thật:
 - [ ] Người dùng bấm Chạy thì thấy **giao diện thật** của dự án, kèm hướng dẫn sử dụng có thật.
 - [ ] Huỷ bất cứ lúc nào đều dừng trong 5 giây và không sót tiến trình con.
 - [ ] Không log nào chứa khoá API; không gọi API nào ra ngoài `localhost` ngoài git và nhà cung cấp LLM mà người dùng đã cấu hình.
-- [ ] Không màn hình nào phải sửa thêm ngoài 10 việc ở §2.
+- [ ] Không màn hình nào phải sửa thêm ngoài **16 việc ở §2**.
 - [ ] CI xanh trên Windows và Linux, không cần mạng.
 
 ---
@@ -182,3 +197,4 @@ Một phiên được coi là đạt khi, với một dự án Python thật:
 5. **Giấy phép:** repo chưa có tệp `LICENSE`. Với định hướng miễn phí cho cộng đồng, nên thêm (MIT hoặc Apache-2.0) trước khi mời người ngoài đóng góp — và thêm `CONTRIBUTING.md` + README ở gốc repo.
 6. **Ngôn ngữ thứ hai:** sau Python là TypeScript/JavaScript hay Go? (TS/JS nhiều người dùng hơn nhưng tree-sitter khó chính xác bằng LibCST.)
 7. **Tên package:** `tro-ly-du-an` / lệnh `trolyduan` có ổn không, hay muốn tên khác trước khi phát hành PyPI?
+8. **Tuỳ chọn "Tài liệu: Song ngữ"** ở màn hình đầu: giữ thì phải viết nhánh sinh tài liệu song ngữ (thêm việc ở `transform/docs.py`), bỏ thì xoá khỏi `copy.ts`. Hiện kế hoạch mặc định **giữ** cả hai chế độ vì giao diện đã có sẵn lựa chọn đó.

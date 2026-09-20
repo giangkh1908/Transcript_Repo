@@ -32,7 +32,9 @@ POST /api/sessions  {"source":{"kind":"folder","value":"D:\\du-an\\website"}}
 1. Kiểm đường dẫn tồn tại, là thư mục, **đọc được**; từ chối nếu là ổ hệ thống (`C:\Windows`, `/`, `/etc`, `~`) — tránh người dùng chọn nhầm và backend đi quét cả máy.
 2. Từ chối nếu thư mục là gốc của một ổ đĩa hoặc chứa hơn `maxFiles` tệp.
 3. Copy sang `origin/` theo kiểu **stream từng tệp**, bỏ: `.git/`, `node_modules/`, `vendor/`, `.venv/`, `__pycache__/`, `dist/`, `build/`, `.next/`, `target/` (danh sách ở `ingest/guard.py`, có thể nới bằng cấu hình `ingest.skipDirs`).
-4. Sau khi copy: đặt quyền chỉ đọc cho `origin/`.
+4. Sau khi copy: đặt cờ chỉ đọc cho `origin/` — trên POSIX là `chmod 0444/0555`, trên Windows là thuộc tính `ReadOnly` + ACL từ chối ghi (`icacls origin /deny "%USERNAME%":(W)`).
+
+   **Biết rõ giới hạn:** trên Windows, cờ chỉ đọc không ngăn được chủ sở hữu tệp — người dùng (và mọi tiến trình chạy dưới tài khoản họ) vẫn ghi được. Vì vậy **bảo đảm thật không phải quyền tệp mà là hash**: `manifest.json` được so lại sau mỗi job và sau mỗi lần chạy thử; lệch ⇒ phiên chuyển `failed` với câu *"Mình phát hiện bản gốc đã bị thay đổi trong lúc chạy — mình dừng lại để không làm hỏng gì thêm."* Quyền chỉ đọc là lớp cản nhẹ, hash là lớp kiểm chứng.
 
 Không copy thì không an toàn; copy bằng hardlink thì nhanh nhưng phá tính "chỉ đọc" (ghi vào hardlink là ghi vào bản gốc) ⇒ **copy thật**.
 
@@ -40,8 +42,12 @@ Không copy thì không an toàn; copy bằng hardlink thì nhanh nhưng phá t�
 
 1. Mở bằng `zipfile`, **không** dùng `extractall`.
 2. Với từng entry, kiểm trước khi ghi:
-   - chuẩn hoá đường dẫn, từ chối `..`, đường dẫn tuyệt đối, ký tự ổ đĩa (`C:`), NCName/ADS trên Windows (`file.txt:stream`);
-   - từ chối symlink/hardlink entry;
+   - chuẩn hoá đường dẫn, từ chối `..`, đường dẫn tuyệt đối, ký tự ổ đĩa (`C:`), ADS trên Windows (`file.txt:stream`);
+   - **từ chối UNC và đường dẫn thiết bị**: `\\server\share`, `\\?\C:\…`, `\\.\…` — đây là đường ghi thẳng ra ngoài thư mục làm việc, kể cả khi phần còn lại của đường dẫn trông hợp lệ;
+   - **từ chối tên dành riêng của Windows**: `CON`, `PRN`, `AUX`, `NUL`, `COM1`–`COM9`, `LPT1`–`LPT9` (kể cả khi có đuôi, `NUL.txt` vẫn là thiết bị);
+   - **từ chối tên kết thúc bằng dấu chấm hoặc khoảng trắng** (`evil. `, `evil.`) — Windows cắt chúng đi, tạo ra hai đường dẫn khác nhau cho cùng một tệp;
+   - từ chối symlink/hardlink/junction entry (zip có cờ symlink; junction trong thư mục nguồn thì kiểm ở `ingest/folder.py` và không đi theo);
+   - chuẩn hoá **cả hai** loại dấu phân cách: zip có thể chứa `\` dù chuẩn là `/`, nên tách theo cả hai trước khi kiểm từng thành phần;
    - tổng kích thước giải nén ≤ `maxUncompressed` (chống zip bomb: kiểm cả **tỉ lệ nén** > 200:1 ⇒ từ chối);
    - tên tệp dài bất thường, tên rỗng, tên chỉ có dấu chấm.
 3. Nếu mọi tệp nằm trong **một** thư mục gốc duy nhất (`website/`) thì bóc lớp đó ra (người dùng nén cả thư mục là chuyện thường).
@@ -76,6 +82,9 @@ Mã lỗi: `source.unsafe_archive` (kèm đường dẫn vi phạm trong `techni
 | Một tệp | 10 MB | bỏ qua tệp, ghi vào `skipped.json` |
 | Độ sâu thư mục | 40 | bỏ qua nhánh, ghi cảnh báo |
 | Tên tệp | 255 ký tự | bỏ qua, ghi cảnh báo |
+| Đường dẫn tuyệt đối dài trên Windows | 260 ký tự (chưa bật long path) | bật `\\?\` cho thao tác tệp khi cần, và **báo** nếu hệ thống không cho phép — không im lặng bỏ qua cả một nhánh thư mục |
+| Thư mục nguồn là gốc ổ đĩa (`C:\`, `D:\`) hoặc `/` | luôn từ chối | phát hiện bằng so sánh với `os.path.splitdrive(path)[1] in ('', os.sep)` và danh sách điểm gắn kết của hệ thống, không đoán theo độ dài chuỗi |
+| Thư mục nguồn là thư mục nhà, thư mục hệ thống, hay thư mục dữ liệu của chính app | luôn từ chối | tránh quét nhầm cả máy hoặc tự đọc chính mình |
 | Đường dẫn ra ngoài thư mục làm việc | mọi trường hợp | `source.unsafe_archive` |
 | Tệp nhị phân (đo bằng 8 KB đầu) | — | bỏ qua, ghi `skipped.json` |
 | Không phải UTF-8 | — | thử `utf-8-sig`, `cp1258`, `latin-1`; không được thì bỏ qua + ghi lý do |

@@ -23,7 +23,7 @@ Một tiến trình Python duy nhất chạy trên máy người dùng, phục v
 │  │            ├── runner     cài + khởi động dự án → cổng xem trước │    │
 │  │            └── llm        4 adapter giao thức, khoá của người dùng│    │
 │  │                                                                  │    │
-│  │  static: Frontend/dist (đã build)  ·  /api/*  ·  /preview proxy  │    │
+│  │  static: Frontend/dist (đã build)  ·  /api/*  ·  cổng xem trước 8687 │    │
 │  └──────────────┬───────────────────────────────┬───────────────────┘    │
 │                 │                               │                        │
 │        ~/.tro-ly-du-an/                  Dự án của người dùng           │
@@ -34,12 +34,16 @@ Một tiến trình Python duy nhất chạy trên máy người dùng, phục v
 │        └── work/<phiên>/                  work/<phiên>/  (bản làm việc)   │
 │                                           └── dự án đã sửa + .zip        │
 │                                                                          │
-│        Cổng xem trước: dự án chạy ở cổng riêng (vd. 5173), proxy qua     │
-│        /preview/<phiên>/ để iframe cùng origin với app.                  │
+│        Cổng xem trước: dự án chạy ở cổng riêng (vd. 5173); proxy phục vụ   │
+│        nó ở MỘT CỔNG KHÁC (8687) để iframe khác origin với app.          │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Vì sao proxy cổng xem trước?** Nếu iframe trỏ thẳng `http://127.0.0.1:5173`, đó là origin khác — được, nhưng sẽ vướng cookie/`X-Frame-Options` của dự án và không kiểm soát được. Proxy qua `/preview/<phiên>/` giữ một origin duy nhất, cho phép tiêm một dải nhỏ thông báo "đây là bản chạy thử", và là chỗ để ngắt kết nối khi người dùng bấm Dừng.
+**Vì sao proxy cổng xem trước, và vì sao nó phải ở cổng khác?** Trỏ iframe thẳng vào cổng dự án (`127.0.0.1:5173`) là phương án đơn giản nhất và đúng về cách ly — nhưng một số dự án chặn nhúng bằng `X-Frame-Options`/`frame-ancestors` (Django mặc định `DENY`), nên vẫn cần một lớp proxy để gỡ header đó và thêm dải thông báo "đây là bản chạy thử".
+
+Lớp proxy đó **phải chạy trên cổng riêng** (8687), không phải trên cổng app: cùng origin thì JS của dự án người dùng chạy trong origin của app, đọc được `localStorage` và token trong DOM rồi gọi toàn bộ API — kể cả credential store. Khác cổng thì Same-Origin Policy của trình duyệt tự lo việc cách ly, và dự án vẫn dùng được `localStorage`/cookie của chính nó. Vì phục vụ ở gốc cổng riêng, **không cần viết lại `<base>`** cho SPA — đường dẫn tương đối vẫn đúng.
+
+Đánh đổi đã biết: `GET /api/health` không còn là chỗ duy nhất cần kiểm khi có nhiều phiên chạy song song — mỗi phiên chạy cần một cổng proxy riêng (8687, 8688, …), do `run/ports.py` cấp cùng lúc với cổng dự án.
 
 ---
 
@@ -110,7 +114,7 @@ Backend/
 │   │   ├── ports.py          cấp cổng còn trống, tránh cổng của backend
 │   │   ├── process.py        spawn, thu log, phát hiện "đã mở cổng", dừng cây tiến trình
 │   │   ├── usage.py          hướng dẫn sử dụng sinh từ phân tích
-│   │   └── proxy.py          proxy /preview/<phiên>/
+│   │   └── proxy.py          proxy cổng 8687/n → cổng dự án (gỡ X-Frame-Options)
 │   ├── llm/
 │   │   ├── router.py         chọn provider/model theo config
 │   │   ├── protocols/        openai.py anthropic.py google.py ollama.py
@@ -160,9 +164,37 @@ POST /api/sessions
    Chạy thử: trạng thái riêng, độc lập với vòng trên (màn Run)
 ```
 
-Hai trục trạng thái **độc lập**: phiên (vòng trên) và phiên chạy thử (`stopped | scanning | starting | running | exited | crashed`). Người dùng có thể chạy thử một dự án ở trạng thái `analyzed` mà chưa cần biến đổi gì.
+**Enum trạng thái phiên — nguồn sự thật duy nhất, mọi tài liệu khác phải dùng đúng bộ này:**
 
-**Khôi phục sau khi tắt máy:** mọi job đang chạy lúc tiến trình chết được đánh dấu `interrupted` khi khởi động lại; thư mục làm việc vẫn còn nên người dùng có thể xem lại kết quả dở, nhưng không tự chạy tiếp — không có chuyện backend âm thầm sửa code sau khi người dùng tắt app.
+```
+queued · ingesting · analyzing · analyzed · transforming · verifying · done · failed · cancelled · interrupted
+```
+
+Bảng map sang màn hình giao diện (để frontend rẽ nhánh một chỗ duy nhất):
+
+| Trạng thái phiên | Màn hình |
+|---|---|
+| `queued`, `ingesting`, `analyzing` | Reading |
+| `analyzed` (có việc để làm) | Result |
+| `analyzed` (không có việc nào) | Clean |
+| `transforming`, `verifying` | Working |
+| `done` | Done |
+| `failed` | Failed |
+| `cancelled`, `interrupted` | mở lại phiên, tùy phần đã làm mà về Reading/Result/Done — kèm một câu giải thích |
+
+**Enum trạng thái chạy thử:** `stopped · installing · preparing · starting · running · exited · crashed` (chi tiết `docs/06` §6).
+
+**Hai trục trạng thái độc lập.** Người dùng có thể chạy thử một dự án ở trạng thái `analyzed` mà chưa cần biến đổi gì.
+
+**Khôi phục sau khi tắt máy — có dọn dẹp, không chỉ đánh dấu.** Lúc khởi động, backend chạy một lượt quét (`jobs/sweeper.py`) theo thứ tự:
+
+1. Mọi phiên đang ở trạng thái chạy (`queued`…`verifying`) ⇒ `interrupted`, kèm câu *"Phiên này bị dừng giữa chừng vì ứng dụng đã tắt. Bạn có thể xem lại phần đã làm."* Không tự chạy tiếp.
+2. Xoá mọi tệp `*.tmp` còn sót trong các thư mục `work/` (ghi atomic bị cắt ngang để lại rác).
+3. Đọc `run_state`: với mỗi phiên ghi là đang chạy, **kiểm tiến trình còn sống không** (theo PID *và* thời điểm bắt đầu, để không giết nhầm tiến trình khác đã được cấp lại PID đó) — còn sống thì kill cây, rồi đóng trạng thái về `exited`.
+4. Giải phóng sổ đăng ký cổng; kiểm lại hai cổng của app (8686, 8687) có bị giữ bởi tiến trình cũ không.
+5. Kiểm `PRAGMA integrity_check` trên SQLite; hỏng ⇒ đổi tên tệp DB thành `sessions.db.corrupt-<ngày>`, tạo DB mới, và báo cho người dùng biết lịch sử phiên đã được đặt sang một bên chứ không mất.
+
+Sweeper chạy cả khi khởi động bình thường, không chỉ sau crash — chi phí gần bằng 0 và nó là thứ duy nhất bảo đảm không còn tiến trình treo giữ cổng.
 
 ---
 
@@ -188,7 +220,9 @@ Hai trục trạng thái **độc lập**: phiên (vòng trên) và phiên chạ
 - Frontend là **client duy nhất**; backend không phục vụ client nào khác, không có API công khai cho bên thứ ba.
 - Backend giữ **kiểu dữ liệu** khớp `Frontend/src/types.ts`; đổi kiểu thì đổi cả hai, có test hợp đồng.
 - Backend **không** trả chuỗi hiển thị cuối cùng cho người dùng, trừ ba ngoại lệ có chủ đích: (1) lý do một câu cho mỗi chỗ rủi ro, (2) hướng dẫn sử dụng ở màn Chạy thử, (3) nội dung tài liệu tiếng Việt do hệ thống viết. Ba thứ này là *nội dung sinh ra*, không phải nhãn giao diện.
-- Xác thực: một token sinh lúc khởi động, ghi vào `~/.tro-ly-du-an/token`, frontend đọc qua endpoint `/api/bootstrap` (chỉ chấp nhận request từ `localhost`) hoặc nhúng sẵn vào `index.html` khi phục vụ static. Chi tiết ở `docs/08` §Bảo mật.
+- **Xác thực token — không bao giờ trả token qua HTTP.** Token sinh một lần khi cài, lưu ở `~/.tro-ly-du-an/token` (0600), **ổn định giữa các lần chạy** (token đổi mỗi lần `serve` sẽ làm giao diện đang mở bị 401 hàng loạt). Khi backend phục vụ static, nó **nhúng token vào `index.html`** lúc trả trang (`<meta name="trolyduan-token">`) — trang đó chỉ đến từ chính backend nên an toàn, không cần vòng gọi API nào.
+  - `GET /api/bootstrap` **chỉ trả capabilities**, tuyệt đối không trả token. Nếu nó trả token thì mọi thứ khác vô nghĩa: bất kỳ tiến trình nào trên máy (hoặc trang web lọt qua kiểm Origin) đều lấy được token rồi gọi toàn bộ API.
+  - Chế độ `--dev` (Vite ở 5173 phục vụ `index.html`): không nhúng được, nên backend in token ra terminal và chỉ khi cờ `--dev` được bật mới chấp nhận thêm `Origin: http://localhost:5173`. Chi tiết ở `docs/08` §4.
 
 ---
 

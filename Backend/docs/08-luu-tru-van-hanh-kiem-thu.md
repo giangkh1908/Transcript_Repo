@@ -46,9 +46,9 @@ Ghi chú thiết kế:
 - **Một job cho mỗi phiên** tại một thời điểm. Gọi `apply` khi đang chạy ⇒ `409` + `jobId` hiện tại.
 - **Đồng thời toàn cục:** tối đa 2 phiên chạy nền cùng lúc (một người dùng, một máy); phiên thứ ba xếp hàng và SSE phát `state: queued` kèm vị trí.
 - **Huỷ mềm trước, cứng sau:** đặt cờ, job kiểm ở các điểm dừng (mỗi tệp, mỗi lô LLM); quá 5 giây không dừng thì `task.cancel()`. Huỷ xong phải dọn tiến trình con và tệp `.tmp`.
-- **Không có job sống sót qua lần khởi động app.** Khi khởi động, mọi phiên đang ở trạng thái chạy bị đánh dấu `interrupted` kèm một câu: *"Phiên này bị dừng giữa chừng vì ứng dụng đã tắt. Bạn có thể xem lại phần đã làm."* Không tự chạy tiếp — người dùng phải bấm.
+- **Không có job sống sót qua lần khởi động app.** Khi khởi động, `jobs/sweeper.py` chạy một lượt dọn dẹp (chi tiết ở `docs/01` §4): đánh dấu `interrupted`, xoá `.tmp` còn sót, kill tiến trình con mồ côi (kiểm theo PID **và** thời điểm bắt đầu), giải phóng sổ cổng, kiểm `integrity_check` của SQLite. Không tự chạy tiếp job cũ — người dùng phải bấm.
 - Việc CPU nặng (parse AST) chạy trong `ProcessPoolExecutor`; việc I/O (LLM, git) chạy async trong tiến trình chính.
-- Kênh SSE: vòng đệm 500 sự kiện/phiên, gửi lại từ `Last-Event-ID`; keep-alive 15 giây; đóng khi job kết thúc (client tự mở lại nếu cần).
+- **Kênh SSE: một chính sách duy nhất** — vòng đệm **500 sự kiện**/phiên, mỗi sự kiện có `id:` tăng đơn điệu; `Last-Event-ID` cũ hơn mức đệm ⇒ phát `resync` để client gọi lại `/api/sessions/{id}` (không cố phát lại); keep-alive 15 giây; đóng khi job kết thúc. Log dài **không** đi qua kênh này mà qua `GET /run/logs?tail=5000`. Con số 5.000 dòng ở §`run_logs` là giới hạn lưu trong DB, không phải kích thước đệm sự kiện — đừng trộn hai con số.
 
 ## 3. Log và đo lường
 
@@ -69,7 +69,7 @@ Mô hình mối đe doạ của một **công cụ local một người dùng**:
 
 | Mối đe doạ | Cách chặn |
 |---|---|
-| Trang web lạ trong trình duyệt gọi vào `localhost:8686` (DNS rebinding / CSRF) | Bắt buộc `X-Local-Token`; kiểm `Origin`/`Host` khớp chính xác `127.0.0.1:8686`; `Sec-Fetch-Site: cross-site` ⇒ từ chối; **chỉ bind 127.0.0.1**, không bao giờ 0.0.0.0 (trừ khi người dùng tự truyền `--host`, kèm cảnh báo in ra terminal) |
+| Trang web lạ trong trình duyệt gọi vào `localhost:8686` (DNS rebinding / CSRF) | Bắt buộc `X-Local-Token`; kiểm `Origin`/`Host` khớp chính xác `127.0.0.1:8686`; `Sec-Fetch-Site: cross-site` ⇒ từ chối; **chỉ bind 127.0.0.1**, không bao giờ 0.0.0.0 (trừ khi người dùng tự truyền `--host`, kèm cảnh báo in ra terminal). Token **không bao giờ trả qua HTTP**: nhúng vào `index.html` lúc backend phục vụ static, lưu ở `~/.tro-ly-du-an/token` (0600), **ổn định giữa các lần chạy** — token đổi mỗi lần `serve` sẽ làm giao diện đang mở 401 hàng loạt. Chỉ khi bật cờ `--dev` (Vite phục vụ trang ở 5173) mới chấp nhận thêm `Origin: http://localhost:5173` và in token ra terminal |
 | Đọc/ghi ra ngoài thư mục cho phép | `core/paths.py`: mọi đường dẫn đi qua `resolve()` rồi `is_relative_to(work_dir)`; áp dụng cho cả đường dẫn đến từ API và từ nội dung zip |
 | Tiêm lệnh shell | Spawn bằng `argv`, không `shell=True`; tham số sinh tự động (cổng) là số nguyên đã kiểm |
 | Zip slip / symlink / zip bomb | `ingest/guard.py` (`docs/03` §3) |
@@ -105,13 +105,15 @@ Chưa có Docker image ở giai đoạn này. Nếu cộng đồng cần, thêm 
 | Hiệu năng | Fixture 500 tệp: phân tích AST < 60 giây, RAM < 1 GB | trước mỗi lần phát hành |
 | Không có mạng | Toàn bộ test phải chạy offline (LLM và git đều được giả lập) | mọi lần commit |
 
-CI: GitHub Actions, ma trận `ubuntu-latest` + `windows-latest`, các bước: `ruff check` → `pytest` → build frontend (`pnpm build`) → build wheel → cài wheel trong môi trường sạch và chạy `trolyduan doctor`.
+CI: GitHub Actions, ma trận `ubuntu-latest` + `windows-latest`, các bước: `ruff check` → `pytest` → build frontend (`pnpm build`) → build wheel → cài wheel trong môi trường sạch và chạy `trolyduan doctor`. **Dựng CI tối thiểu (ruff + pytest + doctor) ngay ở giai đoạn 0** — để tới giai đoạn 4 mới dựng nghĩa là bốn giai đoạn code không có lưới an toàn, và các khác biệt Windows/POSIX (kill tiến trình, quyền tệp, đường dẫn dài) sẽ nổ muộn.
+
+**Ma trận tấn công bắt buộc có test** (không chỉ liệt kê trong tài liệu): 12 ca ở `ingest/guard.py` (`docs/03` §3) gồm cả UNC, tên dành riêng Windows, tên có dấu chấm/khoảng trắng cuối, junction, zip bomb theo tỉ lệ nén; 5 ca trình duyệt ở `core/security.py` (`docs/08` §4); 2 ca rò rỉ (`redact` theo danh sách + theo mẫu); 1 ca prompt injection ghi ra ngoài kế hoạch.
 
 Mục tiêu độ phủ: ≥ 80% cho `ingest/`, `analyze/`, `transform/`, `run/`; adapter LLM kiểm bằng HTTP giả, không cần phủ cao.
 
 ## 7. Vòng đời dữ liệu trên máy người dùng
 
-- Mỗi phiên chiếm một thư mục `work/<id>/` gồm 2 bản dự án (origin + work) — với dự án lớn, đây là điểm tốn đĩa nhất. `/api/doctor` hiện dung lượng đã dùng và `trolyduan clean --older-than 30d` xoá thư mục cũ (chỉ khi người dùng chạy, không tự xoá).
+- Mỗi phiên chiếm một thư mục `work/<id>/` gồm 2 bản dự án (origin + work) **cộng bản sao lưu các tệp đã sửa** (`.backup/`) — với dự án lớn, đây là điểm tốn đĩa nhất. Trước khi nhận dự án, backend **kiểm dung lượng trống** (cần khoảng 3× dung lượng nguồn) và từ chối kèm câu rõ ràng nếu thiếu — hết đĩa giữa chừng có thể làm hỏng cả SQLite lẫn bản làm việc. `/api/doctor` hiện dung lượng đã dùng và số phiên còn giữ; `trolyduan clean` xoá thư mục cũ, **mặc định 7 ngày** và luôn hỏi trước khi xoá (không tự xoá).
 - Nút "Xoá phiên này" ở sidebar (frontend chưa có — ghi vào danh sách việc frontend) ⇒ xoá thư mục + hàng trong DB.
 - Không có sao lưu tự động: bản gốc của người dùng vẫn nguyên ở chỗ cũ, đó chính là sao lưu.
 
@@ -127,14 +129,15 @@ Mọi lỗi đi qua `AppError(code, message, technical, retryable)`:
 
 ## 9. Việc phải làm
 
-- [ ] `store/db.py` + migration 001 với đúng lược đồ ở §1; test tạo DB từ số 0 và nâng cấp từ bản cũ.
-- [ ] `jobs/runner.py`: hàng đợi 2 phiên, huỷ mềm/cứng, đánh dấu `interrupted` khi khởi động; test huỷ giữa lô.
-- [ ] `api/events.py`: vòng đệm + `Last-Event-ID` + keep-alive; test client kết nối muộn vẫn nhận đủ sự kiện.
-- [ ] `core/logging.py` + xoay vòng log + rule "không ghi nội dung tệp/khoá".
-- [ ] `core/security.py`: token sinh lúc khởi động (`secrets.token_urlsafe(32)`), kiểm Origin/Host/Sec-Fetch-Site; test 5 kịch bản tấn công từ trình duyệt.
-- [ ] `cli.py doctor`: Python, git, node, quyền ghi, cổng trống, frontend dist, dung lượng đã dùng, bản mới trên PyPI.
-- [ ] CI 2 hệ điều hành + build wheel có kèm static; test cài trong môi trường sạch.
-- [ ] Bộ fixture repo (5 loại) + test end-to-end; bộ test hiệu năng 500 tệp.
-- [ ] Test hợp đồng OpenAPI ↔ `Frontend/src/types.ts`.
+- [ ] `store/db.py` + migration 001 với đúng lược đồ ở §1; test tạo DB từ số 0 và nâng cấp từ bản cũ. **Quy ước migration:** `user_version` tăng một đơn vị mỗi tệp `00X_*.sql`, chạy trong một transaction, **sao lưu `sessions.db` trước khi nâng cấp** (giữ 3 bản gần nhất); không có migration lùi — DB mới hơn phiên bản app ⇒ từ chối chạy và nói rõ, thay vì đọc sai lược đồ. Test: DB hỏng ⇒ sweeper đổi tên thành `sessions.db.corrupt-<ngày>` và app vẫn khởi động được.
+- [ ] `jobs/runner.py`: hàng đợi 2 phiên (`queued`), huỷ mềm/cứng, khoá tệp theo phiên; test huỷ giữa lô và test hai job cùng phiên bị chặn.
+- [ ] `jobs/sweeper.py`: 5 bước ở `docs/01` §4; test "khởi động lại sau khi bị kill cứng ⇒ không còn tiến trình con, không còn `.tmp`, cổng được giải phóng".
+- [ ] `api/events.py`: `id:` tăng đơn điệu + vòng đệm 500 sự kiện + `resync` khi `Last-Event-ID` quá cũ + keep-alive; test client kết nối lại sau khi hết đệm.
+- [ ] `core/logging.py` + xoay vòng log + `redact()` hai tầng (danh sách + mẫu) + rule "không ghi nội dung tệp/khoá"; test rò rỉ ở `docs/07` §3.
+- [ ] `core/security.py`: token **ổn định** ở `~/.tro-ly-du-an/token` (0600), nhúng vào `index.html`, kiểm Origin/Host/Sec-Fetch-Site; test 5 kịch bản tấn công từ trình duyệt + test "`/api/bootstrap` không trả token".
+- [ ] `cli.py doctor`: Python, git, node, quyền ghi, **dung lượng trống**, cổng 8686/8687 trống, frontend `dist` có và **đúng phiên bản** (`/api/health` trả `frontendBuilt: true|false` để không phục vụ một bản `dist` cũ mà không ai biết), bản mới trên PyPI.
+- [ ] CI 2 hệ điều hành + build wheel có kèm static; test cài trong môi trường sạch. **Dựng CI ngay giai đoạn 0.**
+- [ ] Bộ fixture repo (5 loại) + test end-to-end; bộ test hiệu năng 500 tệp; ma trận tấn công ở §6.
+- [ ] Test hợp đồng OpenAPI ↔ `Frontend/src/types.ts` (**sinh stub OpenAPI từ giai đoạn 0** để việc nối frontend ở giai đoạn 1 không phải chờ).
 
 **Tiêu chí nghiệm thu:** CI xanh trên Windows và Linux; 12 test tấn công + 5 kịch bản trình duyệt đều bị chặn; test hợp đồng bắt được lỗi nếu backend đổi tên một trường mà frontend đang đọc; `pipx install` rồi `trolyduan serve` mở được giao diện mà máy đó **không** có Node; tắt app giữa lúc đang chạy thử dự án thì không còn tiến trình con nào.

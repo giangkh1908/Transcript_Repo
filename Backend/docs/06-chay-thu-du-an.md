@@ -27,7 +27,7 @@ Frontend đã có sẵn 4 bước trong `S.run.starting.steps`; backend phát `s
 | 0 | Đang cài các thư viện cần thiết | Tạo `.venv` (Python) hoặc cài `node_modules` (Node) theo lệnh đã tìm thấy |
 | 1 | Đang chuẩn bị dữ liệu mẫu để bạn xem thử | Tạo `.env` từ `.env.example` (nếu thiếu), chạy migration, nạp seed/fixture nếu tìm thấy, tạo tài khoản mẫu nếu dự án không có sẵn |
 | 2 | Đang khởi động dự án | Chạy lệnh khởi động, chờ cổng mở |
-| 3 | Đang mở giao diện | Bật proxy `/preview/<id>/`, trả địa chỉ + hướng dẫn sử dụng |
+| 3 | Đang mở giao diện | Bật proxy ở cổng riêng, trả địa chỉ + cách sử dụng |
 
 Bước 1 chỉ chạy những gì có bằng chứng: `manage.py` ⇒ `migrate`; `prisma/` ⇒ `prisma migrate deploy`; `alembic.ini` ⇒ `alembic upgrade head`; `fixtures/*.json` hoặc `seeds/` ⇒ nạp; `db.sqlite3` đã có trong repo ⇒ dùng luôn. Không có gì ⇒ bỏ qua bước này trong 1 giây, không bịa.
 
@@ -47,16 +47,19 @@ Không bao giờ tự tải và cài runtime (không `apt`, không `choco`, khô
 ## 5. Cấp cổng
 
 1. Ưu tiên cổng suy ra từ cấu hình dự án (`vite.config`, `--port`, `PORT=`, mặc định của framework).
-2. Nếu cổng đó đang bận: thử cổng kế tiếp (tối đa 20 lần), ghi vào `notes` cổng thật sẽ dùng.
-3. **Không bao giờ** dùng cổng của backend (8686) hay cổng đã cấp cho phiên khác.
-4. `ports.py` giữ một sổ đăng ký cổng đang cấp phát cho các phiên; giải phóng khi tiến trình dừng.
-5. Sau khi chạy, xác nhận cổng **thật sự** mở: thử `GET /` tối đa 60 giây. Dự án có thể tự đổi cổng (`Port 5173 is in use, trying 5174…`) — nếu log có dấu hiệu đó, đọc lại cổng từ log rồi kiểm lại.
+2. **Kiểm cổng bằng cách bind thật**, không phải bằng cách thử kết nối: mở socket bind `127.0.0.1:<port>` rồi đóng ngay. Cách này mới phát hiện được cổng bị giữ bởi tiến trình chỉ lắng nghe trên IPv6 (`::1`) — chuyện rất thường gặp: Vite bind `::1` nên `localhost` vào được mà `127.0.0.1` thì không, đúng như đã gặp khi chạy bộ test của frontend.
+3. Kiểm **cả hai** họ địa chỉ (`127.0.0.1` và `::1`) trước khi kết luận cổng trống; ghi lại địa chỉ bind được để dùng cho `directAddress` (dùng `localhost` khi dự án chỉ nghe IPv6).
+4. Nếu cổng đó đang bận: thử cổng kế tiếp (tối đa 20 lần), ghi vào `notes` cổng thật sẽ dùng.
+5. **Không bao giờ** dùng cổng của backend (8686) hay cổng proxy (8687+) hay cổng đã cấp cho phiên khác.
+6. `ports.py` cấp **hai** cổng cho mỗi phiên chạy (cổng dự án + cổng proxy), giữ sổ đăng ký trong bộ nhớ **và** trên đĩa (`run_state`) để hai phiên không giành nhau; giải phóng khi tiến trình dừng. Cấp phát và lấy sổ là một thao tác khoá (`asyncio.Lock`) để tránh hai phiên cùng nhận một cổng.
+7. Sau khi chạy, xác nhận cổng **thật sự** mở: thử kết nối TCP (không phải `GET /`) trên cả hai họ địa chỉ, tối đa 60 giây, **một deadline duy nhất** dùng chung với timeout khởi động ở §6 — không có hai đồng hồ chồng nhau. Việc đọc log tìm `Listening on`/`Port 5173 is in use, trying 5174` chỉ là **gợi ý bổ sung** để biết dự án đổi cổng, không phải căn cứ chính: log của mỗi framework một kiểu, và có dự án không in gì cả.
 
 ## 6. Tiến trình con
 
 - Spawn **không qua shell** khi có thể (`argv`), dùng `npm.cmd`/`pnpm.cmd` trên Windows.
-- `cwd = work/<phiên>/work`, `env` = môi trường hiện tại + biến của dự án (từ `.env` tổng hợp), **trừ** các biến của chính app (`TROLYDUAN_*`) để không rò rỉ cấu hình nội bộ vào dự án người dùng.
-- Gom log theo dòng (không theo byte), tách `stdout`/`stderr`, phát SSE `log`; giữ 5.000 dòng gần nhất trong bộ nhớ để client kết nối muộn vẫn thấy log.
+- `cwd = work/<phiên>/work`.
+- `env` **không** phải môi trường kế thừa. Dựng từ allowlist tối thiểu: `PATH`, `HOME`/`USERPROFILE`, `LANG`/`LC_ALL`, `TMPDIR`/`TEMP`, `SystemRoot`, `COMSPEC`, `PYTHONIOENCODING`, cộng biến của dự án (từ `.env`). **Không bao giờ** truyền tiếp `TROLYDUAN_*`, và **không bao giờ** truyền bất kỳ biến nào khớp `*_API_KEY`/`*_TOKEN`/`*_SECRET` hay tên trong credential store — nếu không, khoá AI của người dùng sẽ nằm trong môi trường của dự án họ chạy, rồi lọt vào `pip freeze`, log, hay ảnh chụp lỗi.
+- Gom log theo dòng (không theo byte), tách `stdout`/`stderr`, phát SSE `log`; giữ 5.000 dòng gần nhất trong bộ nhớ để client kết nối muộn vẫn thấy log. Log đi qua `redact()` **trước khi** lưu và trước khi phát.
 - Phát hiện cổng mở bằng cách thử kết nối TCP mỗi 500 ms, song song với việc đọc log tìm dấu hiệu `Listening on` / `Running on` / `Development server`.
 - Timeout: cài đặt 10 phút, khởi động 90 giây. Hết thời gian ⇒ `run.timeout` + 30 dòng log cuối để người dùng tự xem.
 - Trạng thái: `stopped → installing → preparing → starting → running → exited | crashed`.
@@ -64,15 +67,22 @@ Không bao giờ tự tải và cài runtime (không `apt`, không `choco`, khô
 
 ## 7. Cổng xem trước (`run/proxy.py`)
 
-`GET /preview/<id>/*` → chuyển tiếp sang `http://127.0.0.1:<port>/…`:
+**Proxy chạy trên một cổng riêng:** `127.0.0.1:8687` (khác cổng app 8686). Đây không phải chi tiết cho đẹp — nó là ranh giới an toàn:
+
+> Nếu khung xem trước cùng origin với app, JS của dự án người dùng (kể cả XSS có sẵn trong dự án đó) chạy được trong origin của app: đọc `localStorage`, gọi `/api/config`, gọi `/api/credentials/*`. Thêm `sandbox` mà vẫn giữ `allow-same-origin` **không** cứu được gì, vì cùng origin thì frame tự gỡ được sandbox của nó.
+>
+> Tách sang cổng riêng thì Same-Origin Policy của trình duyệt tự lo việc cách ly, và lúc đó giữ `allow-same-origin` là **đúng**: dự án mới dùng được `localStorage`/cookie của chính nó (rất nhiều dự án cần), mà vẫn không chạm được vào app.
+
+Mỗi phiên đang chạy được phục vụ ở **gốc một cổng riêng**: `http://127.0.0.1:8687/` chuyển tiếp sang `http://127.0.0.1:<cổng dự án>/…` (phiên thứ hai dùng 8688). Vì phục vụ ở gốc, **không cần viết lại `<base>`** — SPA routing, đường dẫn tương đối và `import` của dự án vẫn đúng như khi chạy trực tiếp. Đây là lý do chọn "một cổng cho mỗi phiên chạy" thay vì tiền tố đường dẫn trên cổng app.
 
 - Chỉ hoạt động khi phiên ở trạng thái `running`; còn lại trả trang nhỏ nói *"Dự án đang không chạy."*
-- Thêm `base` vào `<head>` của HTML để đường dẫn tương đối hoạt động dưới tiền tố `/preview/<id>/`.
-- Chuyển tiếp WebSocket (HMR của Vite, socket.io) — không có thì dự án Node gần như không dùng được.
-- Không cache; giới hạn phản hồi 50 MB mỗi request; chặn `/preview` cho mọi thứ ngoài `127.0.0.1`.
-- Chèn một dải nhỏ, không chặn thao tác: *"Đây là dự án của bạn đang chạy thử"* + nút đóng — để người dùng không nhầm với app thật.
+- **Chuyển tiếp WebSocket thật** (HMR của Vite, socket.io): `httpx` không làm được WebSocket, nên dùng `websockets`/`wsproto` làm client và bắc cầu hai chiều với WebSocket của Starlette. Nếu không làm được thì **bỏ hẳn cam kết này và ghi rõ trong tài liệu** — không để một dòng "hỗ trợ WebSocket" trên giấy mà khi code thì không có.
+- Gỡ `X-Frame-Options` và `Content-Security-Policy: frame-ancestors` khỏi phản hồi HTML (đây là lý do tồn tại của proxy — Django mặc định `DENY`).
+- Không cache; giới hạn phản hồi 50 MB mỗi request; chỉ bind `127.0.0.1`.
+- Chèn một dải nhỏ, không chặn thao tác: *"Đây là dự án của bạn đang chạy thử"* + nút đóng — để người dùng không nhầm với app thật. Dải này chèn bằng cấu trúc DOM, **không `innerHTML`** nội dung do dự án sinh ra.
+- Không bao giờ đặt hay chuyển tiếp cookie/`Authorization` của app sang cổng proxy.
 
-⚠️ **Việc frontend phải sửa:** iframe trong `screens/Run.tsx` trỏ `previewSrc` = `/preview/<id>/` và **bỏ `allow-same-origin`** khỏi `sandbox`. Proxy đã cùng origin nên không cần cờ đó nữa, và bỏ đi thì code của dự án không chạm được vào `localStorage`/cookie của app — đúng như ghi chú `ponytail:` hiện có trong code.
+⚠️ **Việc frontend phải sửa:** `previewSrc` = `http://127.0.0.1:8687/` (origin khác — giá trị thật do backend trả, không hard-code), `sandbox` **giữ nguyên** `allow-scripts allow-forms allow-same-origin allow-popups` vì đã khác origin; nút "Mở trong tab mới" mở `directAddress`. Phải sửa lại ghi chú `ponytail:` trong `screens/Run.tsx` và mục "Nối backend thì đổi ở đâu" của `Frontend/README.md` — cả hai đang khuyên **bỏ** `allow-same-origin`; lời khuyên đó nguy hiểm khi proxy cùng origin và không cần thiết khi đã tách cổng.
 
 ## 8. Hướng dẫn sử dụng (`run/usage.py`)
 
@@ -102,22 +112,32 @@ Nếu chưa có bằng chứng nào ngoài "dự án mở được ở địa ch
 
 | Rủi ro | Cách chặn |
 |---|---|
-| Chạy ngoài ý muốn | `confirm: true` bắt buộc; lệnh đã hiện trước cho người dùng xem; không chạy lúc khởi động app |
-| `postinstall` của npm chạy script lạ | Cảnh báo một lần: *"Cài thư viện có thể chạy script của gói bên thứ ba. Chỉ tiếp tục nếu bạn tin dự án này."* (hiện ở `notes`, không chặn cứng — người dùng đang chạy dự án của chính họ) |
-| Lệnh lấy từ README | Đánh dấu rõ nguồn: `evidence: "README.md dòng 24"` — người dùng thấy được nó đến từ đâu |
-| Khoá API rò vào log/env | Không truyền biến `TROLYDUAN_*` vào tiến trình con; lọc khoá khỏi log trước khi lưu và trước khi phát SSE |
+| Chạy ngoài ý muốn | `confirm: true` bắt buộc; **hiện đầy đủ mọi lệnh sẽ chạy** trước khi chạy (kể cả lệnh do backend thêm vào, vd. `pip install`), kèm nguồn; không chạy lúc khởi động app |
+| `postinstall` của npm chạy script lạ | Ba lớp: (1) nếu `package.json` có `scripts.postinstall`/`preinstall`, hiện nguyên văn script đó cho người dùng xem trước; (2) hộp kiểm *"Tôi tin dự án này"* bắt buộc ở lần chạy đầu tiên của mỗi nguồn, ghi lại vào phiên; (3) khi phát hiện script cài đặt, đưa ra lựa chọn chạy kèm `--ignore-scripts` — nói rõ đổi lại một số dự án sẽ không chạy được vì thiếu bước build gốc |
+| Lệnh lấy từ README | Đánh dấu rõ nguồn: `evidence: "README.md dòng 24"` — người dùng thấy được nó đến từ đâu. Lệnh lấy từ README **không** được chạy ở chế độ tự động, chỉ khi người dùng bấm |
+| Khoá API rò vào log/env | Env allowlist ở §6 (không truyền `*_API_KEY`/`*_SECRET`); `redact()` chạy trước khi lưu log và trước khi phát SSE |
+| Bí mật của chính dự án rò ra log/`.zip` | `redact()` theo **mẫu** (giá trị trong `.env` của dự án, `sk-…`, `AKIA…`, `Bearer …`, chuỗi dài entropy cao) chứ không chỉ theo credential store; `.env` không được đưa vào `.zip` xuất ra (chỉ giữ `.env.example`) |
 | Tiến trình treo giữ tài nguyên | Timeout cứng ở §6; nút Dừng luôn hiện khi `installing/preparing/starting/running` |
 | Docker (tuỳ chọn, giai đoạn sau) | `--isolate docker`: `--network none` trừ cổng xem trước, `--memory 1g --cpus 1`, mount chỉ `work/` |
+
+**Cách kill cây tiến trình — nói cụ thể, đây là chỗ dễ làm sai nhất:**
+
+| Nền tảng | Cách làm | Cái **không** dùng |
+|---|---|---|
+| Windows | Tạo **Job Object** (`CreateJobObject` + `AssignProcessToJobObject`, qua `pywin32` hoặc `ctypes`) với `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`; kill = `TerminateJobObject`. Cách này không phụ thuộc PID còn sống hay không | `taskkill /T /PID <pid>`: PID có thể đã được cấp lại cho tiến trình khác, và `/T` chỉ đi theo cây cha-con hiện tại — tiến trình đã `setsid`/detach sẽ thoát lưới |
+| POSIX | `start_new_session=True` khi spawn ⇒ có process group riêng; kill bằng `os.killpg(pgid, SIGTERM)` | `os.kill(pid)` trần: chỉ giết tiến trình cha (`npm run dev` giết xong vẫn còn `node` con giữ cổng) |
+| Cả hai | Huỷ **hai pha**: SIGTERM/tín hiệu mềm → chờ 5 giây → kill cứng. Sau đó xác nhận cổng đã đóng và không còn tiến trình con | Tin rằng `pip`/`npm` sẽ tự thoát khi nhận SIGINT — chúng thường giữ tiến trình con và bỏ qua tín hiệu |
 
 ## 11. Việc phải làm
 
 - [ ] `run/detect.py`: tái dùng `analyze/entrypoints.py`, không viết lại logic quét.
-- [ ] `run/ports.py`: cấp cổng, sổ đăng ký, tránh 8686, test "cổng bận thì nhảy cổng".
-- [ ] `run/process.py`: spawn theo argv, gom log theo dòng, phát hiện cổng mở, timeout, kill cả cây tiến trình; test trên Windows **và** POSIX.
-- [ ] `run/proxy.py`: chuyển tiếp HTTP + WebSocket + thêm `<base>` + dải thông báo; test bằng fixture Vite mini.
+- [ ] `run/ports.py`: cấp cổng, sổ đăng ký, tránh 8686 và 8687, test "cổng bận thì nhảy cổng".
+- [ ] `run/process.py`: spawn theo argv, **env allowlist**, gom log theo dòng, phát hiện cổng mở, timeout, kill cây bằng Job Object (Windows) / process group (POSIX); test trên Windows **và** POSIX, có test riêng "tiến trình con detach vẫn bị giết".
+- [ ] `run/detect.py`: phát hiện `scripts.postinstall`/`preinstall` trong `package.json` và đưa vào `notes` + lựa chọn `--ignore-scripts`.
+- [ ] `run/proxy.py`: phục vụ trên cổng riêng 8687, chuyển tiếp HTTP + WebSocket + thêm `<base>` + dải thông báo (chèn bằng DOM, không `innerHTML`); test bằng fixture Vite mini.
 - [ ] `run/usage.py`: 5 nguồn bằng chứng ở §8; test "không có bằng chứng ⇒ trả 1 bước".
 - [ ] `atexit`/signal handler dừng mọi tiến trình con; test: khởi động app, chạy dự án, kill app, kiểm không còn tiến trình con.
 - [ ] Bước "chuẩn bị dữ liệu mẫu": nhận diện migrate/seed 4 loại (Django, Prisma, Alembic, fixture JSON).
 - [ ] Fixture `tests/fixtures/web-py` (Flask 40 dòng) và `web-ts` (Vite mini) để test end-to-end không cần mạng.
 
-**Tiêu chí nghiệm thu:** với fixture Flask: bấm Chạy → 4 bước hiện đúng → giao diện thật hiện trong khung xem trước → địa chỉ và hướng dẫn sử dụng có thật → bấm Dừng thì cổng đóng trong 5 giây và không còn tiến trình con; với dự án thiếu bằng chứng: màn Run **không** hiện nút Chạy mà nói rõ lý do; với dự án cần Docker mà Docker tắt: báo đúng câu, không treo.
+**Tiêu chí nghiệm thu:** với fixture Flask: bấm Chạy → 4 bước hiện đúng → giao diện thật hiện trong khung xem trước → địa chỉ và hướng dẫn sử dụng có thật → bấm Dừng thì cổng đóng trong 5 giây và không còn tiến trình con; **fixture có tiến trình con detach (`npm run dev` bị bọc) vẫn bị dọn sạch**; với dự án thiếu bằng chứng: màn Run **không** hiện nút Chạy mà nói rõ lý do; với dự án cần Docker mà Docker tắt: báo đúng câu, không treo.

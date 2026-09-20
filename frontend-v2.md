@@ -207,7 +207,7 @@ Hai dòng cảnh báo chỉ hiện khi có thật: tệp `.env` chỉ có bản 
 
 Chạy thử **không sửa gì** trong dự án; dòng trấn an cuối màn nói rõ điều đó.
 
-> **Hiện trạng code:** chưa nối backend, nên chặng 2 mô phỏng bằng timer và khung xem trước trỏ vào trang mẫu `public/preview-demo.html`. Khi nối API: thay bằng trạng thái thật từ server, cho iframe trỏ vào cổng của dự án đang chạy, và **phục vụ bản xem trước từ tên miền khác rồi bỏ `allow-same-origin`** khỏi iframe để code người dùng không chạm được vào app này (`src/screens/Run.tsx`).
+> **Hiện trạng code:** chưa nối backend, nên chặng 2 mô phỏng bằng timer và khung xem trước trỏ vào trang mẫu `public/preview-demo.html`. Khi nối API: thay bằng trạng thái thật từ server, và phục vụ bản xem trước từ **một cổng khác** với app (backend cấp, ví dụ `http://127.0.0.1:8687`) rồi **giữ nguyên** `allow-same-origin` trong `sandbox` của iframe — khác origin thì trình duyệt đã tách app khỏi dự án, còn bỏ cờ đó sẽ làm chính dự án mất `localStorage`. Cùng origin mà vẫn `allow-same-origin` thì JS của dự án đọc được token và cấu hình của app, nên tuyệt đối tránh (`src/screens/Run.tsx`).
 
 ---
 

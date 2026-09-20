@@ -35,9 +35,11 @@ Giai đoạn 1 chỉ cần **Python** chạy thật tốt (dự án demo là Pyt
 
 1. Lấy mọi định danh **do dự án định nghĩa** (không lấy tên import từ thư viện ngoài): hàm, lớp, biến, tham số, thuộc tính, hằng.
 2. Chấm điểm "không phải tiếng Anh":
-   - có ký tự ngoài ASCII (chữ Trung, Nhật, Hàn, Việt có dấu) ⇒ chắc chắn;
-   - là tiếng Việt không dấu (`lay_nguoi_dung`) ⇒ dò bằng danh sách âm tiết tiếng Việt + ngữ cảnh chú thích;
-   - là tiếng Anh viết tắt khó hiểu (`usrMgr`, `tmpBf`) ⇒ **không** đổi ở giai đoạn này (dễ gây tranh cãi, cần người dùng quyết).
+   - có ký tự ngoài ASCII (chữ Trung, Nhật, Hàn, Việt có dấu) ⇒ chắc chắn, không cần chấm điểm;
+   - là **tiếng Việt không dấu** (`lay_nguoi_dung`, `ma_don_hang`) ⇒ tách định danh theo `_`/camelCase, đối chiếu từng âm tiết với danh sách ~6.700 âm tiết tiếng Việt hợp lệ (bảng tĩnh sinh sẵn trong `analyze/data/am_tiet_vi.txt`), rồi tính tỉ lệ âm tiết khớp: **≥ 60% và ít nhất 2 âm tiết** ⇒ coi là tiếng Việt;
+   - là tiếng Anh viết tắt khó hiểu (`usrMgr`, `tmpBf`) ⇒ **không** đổi ở giai đoạn này (dễ gây tranh cãi, cần người dùng quyết). Ghi vào `skipped_naming` để báo cáo nói rõ là *"có N tên viết tắt mình không tự đổi"*.
+
+   Ba ngưỡng trên đều là hằng số trong `analyze/identifiers.py`, có test riêng cho từng nhánh (tên tiếng Trung, tiếng Việt có dấu, tiếng Việt không dấu, tiếng Anh viết tắt, tên trùng khoá env).
 3. Với mỗi ứng viên: đếm số tham chiếu trong toàn dự án (AST, không grep), danh sách tệp + dòng.
 4. Loại khỏi danh sách đổi tên (chuyển sang **rủi ro** hoặc bỏ hẳn):
    - tên là một phần API công khai (được export trong `__all__`, `export`, `pub`, là route/endpoint, là tên tham số CLI);
@@ -117,14 +119,14 @@ Cổng dự kiến: đọc từ `vite.config.*`, `package.json` scripts (`--port
 
 - LLM chỉ nhận **phần đã cắt gọn**: với tên định danh là chữ ký + docstring + chú thích quanh nó, không gửi cả tệp.
 - Ước lượng trước chi phí của một phiên (số lô × token trung bình) và hiện ở `analysis.costEstimate` — frontend chưa dùng, nhưng đây là dữ liệu người dùng cần biết trước khi bấm "Bắt đầu xử lý".
-- Ngân sách cứng mỗi phiên (`llm.budget`, mặc định 2.000.000 token); vượt ⇒ dừng và báo, không tự tiêu thêm.
+- Ngân sách cứng mỗi phiên (`llm.budgetTokensPerSession`, mặc định 2.000.000 token); vượt ⇒ dừng và báo, không tự tiêu thêm.
 - Cache theo `sha256(nội dung + model + prompt version)` trong SQLite ⇒ chạy lại cùng dự án không tốn tiền lần hai.
 
 ## 10. Việc phải làm
 
 - [ ] `inventory.py`: duyệt tệp + `.gitignore` + nhận diện ngôn ngữ/mã hoá/tệp generated; test trên fixture hỗn hợp.
 - [ ] `parsers/libcst_py.py`: lấy định danh, chú thích, import, `__all__`, route Django/Flask; giữ `position` cho mọi node.
-- [ ] `identifiers.py`: heuristic chấm điểm + đếm tham chiếu + 4 điều kiện loại trừ ở §3.4; test với fixture tiếng Trung, tiếng Việt không dấu, và tên trùng khoá env.
+- [ ] `identifiers.py`: heuristic chấm điểm theo **đúng ba ngưỡng ở §3.2** (khác ASCII; tỉ lệ âm tiết tiếng Việt ≥ 60% và ≥ 2 âm tiết, dùng bảng `analyze/data/am_tiet_vi.txt`); + đếm tham chiếu + 4 điều kiện loại trừ ở §3.4; test với fixture tiếng Trung, tiếng Việt không dấu, tiếng Anh viết tắt, và tên trùng khoá env.
 - [ ] `comments.py`: tách chú thích/docstring, loại chỉ thị tool, phân loại translate/keep/risky.
 - [ ] `contracts.py`: quét 10 loại tệp cấu hình, trích tên khoá, đối chiếu định danh ⇒ sinh `riskyItems` kèm `evidence`; test với fixture `docker-compose.yml` + `.env.example` + `deploy.yaml`.
 - [ ] `summary.py`: 3 câu văn xuôi, có test "thiếu dữ kiện thì phải nói là thiếu".

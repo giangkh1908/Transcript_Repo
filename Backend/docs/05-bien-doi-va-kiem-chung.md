@@ -8,7 +8,7 @@
 2. **Ghi atomic.** Ghi ra `<tệp>.tmp` cùng thư mục → `os.replace`. Không bao giờ để lại tệp nửa vời nếu tiến trình chết giữa lô.
 3. **Giữ nguyên định dạng.** LibCST giữ được khoảng trắng, dấu ngoặc, thứ tự trường; đây là lý do chọn nó. Ngoại lệ duy nhất: chú thích bị dịch nên dài/ngắn hơn — chỉ ghi lại đúng dòng chú thích đó.
 4. **Giữ mã hoá gốc** đã ghi ở `analyze/inventory.py` (tệp `cp1258` phải ở lại `cp1258`).
-5. **Lưu bản trước khi sửa.** Nội dung gốc của mọi tệp bị chạm được lưu vào SQLite (`changes.before_text`) ⇒ sinh được diff, và "quay lại bản gốc" là thao tác một nút.
+5. **Lưu bản trước khi sửa, ở dạng tệp chứ không chỉ trong DB.** Trước khi chạm vào một tệp, bản gốc được copy vào `work/<phiên>/.backup/<đường-dẫn-tương-đối>`; `changes.before_text` trong SQLite chỉ dùng để sinh diff nhanh, và **được phép bỏ trống với tệp lớn**. Lý do: nếu chỉ dựa vào `before_text`, một tệp >1 MB sẽ không hoàn tác được, và `/revert` sẽ khôi phục nửa vời — bản `work/` còn lẫn cả nội dung cũ và mới, đúng kiểu hỏng khó phát hiện nhất. Quy tắc: **tệp nào bị sửa thì tệp đó phải có bản sao trong `.backup/`**, không có ngoại lệ; hết dung lượng thì dừng phiên và báo, không sửa tiếp.
 6. **Thứ tự cố định:** đổi tên → dịch chú thích → viết tài liệu → áp dụng thay đổi rủi ro đã được đồng ý → sinh diff. Đổi tên trước vì dịch chú thích sau đó sẽ dùng tên mới trong câu văn, tránh phải dịch hai lần.
 
 ---
@@ -31,6 +31,18 @@ Với mỗi phép `rename_identifier`, chỉ sửa những chỗ **thực sự t
 Sau khi đổi một định danh: **không** còn lần xuất hiện nào của tên cũ trong phạm vi đã xác định. Đây là một trong các bất biến được `verify/references.py` kiểm lại (§4).
 
 Nếu hai phép đổi tên cho ra cùng một tên trong cùng scope (xung đột sau khi dịch): đổi phép sau thành tên có hậu tố nghĩa (`get_user_v2` → `fetch_user`), ghi lại quyết định vào log; không im lặng đổi tên khác.
+
+**Tên do AI đề xuất phải qua kiểm tra trước khi dùng — không tin đầu ra của mô hình.** Đây là chỗ một prompt injection trong chú thích repo có thể biến thành hành động thật, nên luật phải cứng:
+
+| Luật cho tên mới | Lý do |
+|---|---|
+| Khớp `^[A-Za-z_][A-Za-z0-9_]*$` | Chặn `../../evil`, `a/b`, `x;rm -rf`, tên có dấu cách, tên Unicode lạ |
+| Không phải từ khoá Python (`keyword.iskeyword`) và không trùng tên builtin đang dùng | Tránh sinh code không chạy được |
+| Không chứa `__` ở hai đầu trừ khi tên cũ cũng vậy | Tránh vô tình tạo tên đặc biệt của Python |
+| Độ dài ≤ 64 ký tự | Tên dài là dấu hiệu mô hình đang trả về cả câu |
+| Không đổi kiểu chữ giữa các tệp cùng một định danh | Nhất quán |
+
+Tên nào vi phạm ⇒ **giữ nguyên tên cũ** cho định danh đó, ghi một dòng vào `verification.warnings`, và không thử lại quá 2 lần. Không bao giờ để tên do AI sinh ra đi thẳng vào đường dẫn hay lệnh.
 
 ## 3. Dịch chú thích (`transform/translate.py`)
 
@@ -99,6 +111,8 @@ Ba lớp, chạy theo thứ tự, dừng ở lớp nào hỏng thì vẫn chạy
 
 ### Lớp 3 — Chạy thử (`smoke.py`, chạy code người dùng — chỉ khi họ đồng ý)
 
+> **Thứ tự triển khai:** lớp này **không** thuộc giai đoạn 2. Nó dùng lại `run/ports.py` + `run/process.py`, mà hai thứ đó chỉ có ở giai đoạn 3 (màn Run), nên lớp 3 đi cùng giai đoạn 3 — nếu không sẽ tạo phụ thuộc vòng giữa hai giai đoạn. Giai đoạn 2 nghiệm thu với lớp 1 + lớp 2, và trong thời gian đó `verification.summary` sẽ là `not_run` cho phần chạy thử (giao diện đã có nhánh hiển thị đúng cho trường hợp này).
+
 - Hỏi một lần, ở bước `apply`, bằng một lựa chọn rõ nghĩa: *"Kiểm tra bằng cách chạy thử dự án (mình sẽ chạy đúng lệnh khởi động đã tìm thấy, trong thư mục làm việc)"* — mặc định bật.
 - Cách chạy: dùng lại `run/detect.py` + `run/process.py` với chế độ `smoke`: chạy lệnh khởi động, chờ tối đa 45 giây, coi là đạt khi **cổng mở** hoặc log có dấu hiệu khởi động xong, rồi tắt tiến trình và dọn cổng.
 - Nếu dự án có bộ test (`pytest`, `npm test`, `go test`): chạy bộ test thay cho smoke, timeout 300 giây, chỉ lấy kết quả tổng, không đổ log dài vào báo cáo.
@@ -128,12 +142,12 @@ Ba lớp, chạy theo thứ tự, dừng ở lớp nào hỏng thì vẫn chạy
 
 ## 8. Việc phải làm
 
-- [ ] `rename.py`: đổi theo scope trên LibCST; 14 test tình huống (alias import, `__all__`, decorator, f-string, thuộc tính class, biến trùng tên khác scope, Django field, Pydantic alias).
+- [ ] `rename.py`: đổi theo scope trên LibCST; **luật tên ở §2 (regex, từ khoá Python, độ dài) có test riêng với đầu ra giả của mô hình gồm cả `../../evil` và tên rỗng**; 14 test tình huống (alias import, `__all__`, decorator, f-string, thuộc tính class, biến trùng tên khác scope, Django field, Pydantic alias).
 - [ ] `translate.py`: lô + 5 kiểm tra kết quả + nhánh "giữ nguyên khi lô lỗi"; test bằng mô hình giả (không gọi mạng trong test).
 - [ ] `docs.py`: 8 tệp, quy tắc "không bịa"; test khẳng định tệp `cau-hinh.md` không chứa giá trị thật của bất kỳ khoá nào.
-- [ ] `writer.py`: ghi atomic + giữ mã hoá + lưu `before_text`.
+- [ ] `writer.py`: ghi atomic + giữ mã hoá + **sao lưu `.backup/` cho mọi tệp bị sửa**; test ghi khi tệp đang bị IDE giữ (sharing violation trên Windows) ⇒ retry rồi báo `perm.unwritable`, không để lại `.tmp`.
 - [ ] `verify/syntax.py`, `verify/references.py`: chạy trên fixture trước/sau; test bắt buộc có một fixture "sửa hỏng" để chắc chắn lớp 2 phát hiện được.
-- [ ] `verify/smoke.py`: chế độ smoke + dùng bộ test nếu có + timeout + dọn tiến trình; test với fixture Flask nhỏ.
+- [ ] `verify/smoke.py`: chế độ smoke + dùng bộ test nếu có + timeout + dọn tiến trình; test với fixture Flask nhỏ. **Thuộc giai đoạn 3** (§7).
 - [ ] `/revert` + test "quay lại rồi hash khớp bản gốc".
 - [ ] `CHANGES.md`: mục "việc bạn phải làm sau khi tải về" là **bắt buộc** khi có thay đổi rủi ro (test).
 

@@ -143,7 +143,7 @@ http://localhost:5173/?stage=run&theme=dark
 |---|---|
 | Dữ liệu dự án, kết quả quét, danh sách chỗ rủi ro | `src/demo.ts` → thay bằng lời gọi API, giữ nguyên kiểu ở `src/types.ts` |
 | Tiến trình thật thay cho timer | `setTimeout` trong `components/ProjectFlow.tsx`, `screens/Reading.tsx`, `screens/Working.tsx`, `screens/Run.tsx` |
-| Khung xem trước dự án đang chạy | `demoRun.previewSrc` + thuộc tính `sandbox` của iframe trong `screens/Run.tsx` — phục vụ bản xem trước từ **tên miền khác** rồi bỏ `allow-same-origin` để code người dùng không chạm được vào app này |
+| Khung xem trước dự án đang chạy | `demoRun.previewSrc` + thuộc tính `sandbox` của iframe trong `screens/Run.tsx` — bản xem trước phải được phục vụ từ **cổng khác** (backend cấp, vd. `http://127.0.0.1:8687`). Khác origin thì Same-Origin Policy đã tách app khỏi dự án, nên **giữ** `allow-same-origin`; bỏ cờ đó sẽ làm dự án mất `localStorage`/cookie của chính nó. Tuyệt đối không phục vụ bản xem trước cùng origin với app — khi đó JS của dự án đọc được token và cấu hình của app |
 | Nơi lưu cấu hình | `config/store.ts` — `setConfigBackend()` cắm backend DB/file, UI không đổi; key mới thì đăng ký ở `config/schema.ts` |
 | Giá trị API key | `config/credentials.ts` — không bao giờ đi vào config document, chỉ mang tên tham chiếu |
 

@@ -264,9 +264,13 @@ function Running({ onStop }: { onStop: () => void }) {
         </div>
 
         {/*
-          ponytail: giữ allow-same-origin vì trang xem trước hiện là tệp trong
-          /public. Khi nối backend, phục vụ bản xem trước từ tên miền khác rồi
-          bỏ allow-same-origin để code của người dùng không chạm được vào app này.
+          ponytail: trang xem trước hiện là tệp của chính app trong /public nên
+          cùng origin là chấp nhận được. Khi nối backend, bản xem trước PHẢI
+          được phục vụ từ một CỔNG KHÁC (backend cấp, vd. 127.0.0.1:8687) rồi
+          giữ nguyên allow-same-origin ở đây: khác origin thì Same-Origin Policy
+          đã tách app khỏi dự án, còn bỏ cờ này sẽ làm dự án mất localStorage
+          của chính nó. Cùng origin mà vẫn allow-same-origin thì code của dự án
+          đọc được token và cấu hình của app — không được.
         */}
         <iframe
           title={S.run.running.frameTitle}

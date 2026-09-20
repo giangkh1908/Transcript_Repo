@@ -82,7 +82,12 @@ refs:
 
 `source` có thể là `store` (file trên) hoặc `env` (biến môi trường cùng tên). Ưu tiên `env` khi cả hai cùng có — người dùng cố tình đặt biến môi trường là có ý. `writable: false` khi giá trị đến từ `env` (UI phải hiện là chỉ đọc).
 
-**Bảo vệ chống rò rỉ:** một hàm `redact()` duy nhất chạy trên mọi dòng log và mọi thông điệp lỗi trước khi ghi/phát SSE — nó thay mọi giá trị đang có trong credential store bằng `***`. Có test: ghi khoá giả vào store, gọi một API lỗi, khẳng định chuỗi khoá không xuất hiện ở log, ở `/api/health`, ở SSE.
+**Bảo vệ chống rò rỉ — hai tầng, không phải một:**
+
+1. **Theo danh sách:** `redact()` thay mọi giá trị đang có trong credential store (và mọi biến khớp `*_API_KEY`/`*_TOKEN`/`*_SECRET` trong môi trường tiến trình) bằng `***`.
+2. **Theo mẫu:** thay cả những bí mật mà ta *không* biết trước — giá trị trong `.env` của dự án, `sk-…`, `AKIA…`, `ghp_…`, `Bearer <chuỗi>`, chuỗi dài entropy cao (>40 ký tự, không khoảng trắng) trong log của tiến trình con. Tầng này quan trọng vì dự án người dùng có bí mật của chính nó, và ta in log của nó ra.
+
+`redact()` chạy trên **mọi** đường ra: log tệp, SSE, thông điệp lỗi, `technical`, và nội dung `run_logs` trước khi ghi vào SQLite. Test bắt buộc: ghi khoá giả vào store, thêm một `.env` giả có `DATABASE_URL=postgres://user:pass@host/db`, chạy một phiên lỗi, rồi khẳng định cả hai chuỗi đều **không** xuất hiện trong log, `/api/health`, SSE và `.zip` xuất ra.
 
 ## 4. Tầng LLM
 
@@ -124,7 +129,7 @@ class Adapter(Protocol):
 | Thử lại | 429/500/502/503/504 và lỗi mạng: thử lại tối đa `llm.maxRetries`, backoff 1s → 2s → 4s + jitter. Tôn trọng `retry-after` |
 | Không thử lại | 400/401/403/404/422 — lỗi do cấu hình, thử lại chỉ tốn tiền |
 | Ngân sách | Cộng dồn token mỗi phiên; vượt `llm.budgetTokensPerSession` ⇒ dừng **trước** lời gọi tiếp theo, báo *"Đã chạm giới hạn chi phí bạn đặt cho phiên này"* |
-| Cache | Bảng `llm_cache(hash, model, prompt_version, response)`; hash = sha256(nội dung gửi + model + prompt_version). Chạy lại cùng dự án ⇒ gần như miễn phí |
+| Cache | Bảng `llm_cache(hash, model, prompt_version, response)`; hash = sha256(nội dung gửi + model + prompt_version). Chạy lại cùng dự án ⇒ gần như miễn phí. **Quy ước tăng phiên bản:** sửa bất kỳ chữ nào trong một prompt ⇒ tăng `_v1` → `_v2` trong cùng commit; tên phiên bản là một hằng số trong `llm/prompts/__init__.py`, không viết chuỗi rời rạc. Quên tăng ⇒ người dùng nhận kết quả cũ từ cache mà không hiểu vì sao. Có test: đổi phiên bản ⇒ cache phải miss |
 | Đếm token | Đếm xấp xỉ (ký tự/4 cho tiếng Anh, ký tự/2.5 cho tiếng Việt/code) để ước lượng; số thật lấy từ `usage` của nhà cung cấp khi có |
 | Song song | Tối đa 4 lời gọi đồng thời cho một phiên (tránh bị 429 vì tự bắn quá nhanh) |
 
@@ -141,6 +146,18 @@ Mỗi mục đích một prompt riêng, có **số phiên bản** (dùng cho cac
 | `docs_v1` | Tài liệu tiếng Việt | Markdown |
 
 Prompt do **người viết code** kiểm soát, nằm trong repo, không do người dùng sửa (thêm một chỗ để hỏng).
+
+**Mọi đầu ra đều phải qua kiểm tra hình dạng — không chỉ prompt dịch chú thích.** Một hàm `validate(prompt_version, raw_text)` chung, mỗi prompt khai báo schema của nó (JSON Schema nhỏ, tự viết — không cần thêm thư viện):
+
+| Prompt | Kiểm gì | Khi sai |
+|---|---|---|
+| `summary_v1` | JSON có đúng 3 trường chuỗi, không rỗng, không chứa từ khoá nội bộ bị cấm | Giữ câu suy từ manifest (chế độ chỉ-AST), ghi `degraded: ["summary"]` |
+| `name_suggest_v1` | JSON `{old: new}`, mọi `new` qua luật tên ở `docs/05` §2 | Bỏ tên vi phạm, giữ tên cũ cho định danh đó |
+| `comment_translate_v1` | Mảng chuỗi đúng số dòng, marker chú thích không đổi, không lẫn chỉ thị của mô hình | Giữ nguyên chú thích gốc của **lô đó** |
+| `risk_reason_v1` | JSON `{key: câu}` đúng số khoá, mỗi câu 1 câu, không có từ bị cấm | Dùng câu mẫu dựng từ dữ kiện (`key`, `file`, `count`) |
+| `docs_v1` | Markdown không rỗng, không chứa `<script`, không lộ giá trị khoá/đường dẫn tuyệt đối | Bỏ tệp đó khỏi bộ tài liệu, báo trong `warnings` |
+
+Test bắt buộc: cho mô hình giả trả **JSON vỡ, JSON đúng cú pháp nhưng sai schema, và văn bản thuần** — cả ba trường hợp không được làm hỏng phiên, phải rơi đúng vào nhánh dự phòng ở bảng trên.
 
 ### 4.6 Chống prompt injection — nội dung repo là dữ liệu không tin cậy
 
